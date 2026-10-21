@@ -1,0 +1,51 @@
+# Roadmap & status
+
+This page is the single source of truth for "is X actually built yet?" — updated the same day any item's status changes, not retroactively. If a page elsewhere in this guide seems to claim more than this page shows as done, trust this page.
+
+**Last updated:** 2026-10-22
+
+## Phase 0 — scaffold
+
+- [x] Git repository, `.gitignore`
+- [x] `pyproject.toml` — packaging, `dev`/`docs` extras
+- [x] Python virtual environment, editable install verified
+- [x] `LICENSE` (Apache-2.0) + `NOTICE`
+- [x] This documentation site (MkDocs + Material)
+
+**Rename note:** the project was originally named `graphcheck`. Renamed to `graphtrace` on 2026-10-18 — `graphcheck` collides on PyPI with an unrelated, actively-published Neo4j graph-data-quality tool of the same name, confirmed before anything of this project went public. Package, imports, CLI flag names (`--gt-mode`, `--gt-report`, `--gt-export`), env var (`GRAPHTRACE_MODE`), config filename (`graphtrace.yaml`), the internal plan doc, and the top-level folder were all updated together in one pass, not left half-renamed.
+
+## Week 1 — foundations
+
+**Goal (per the build plan):** plugin entry point, `Trajectory`, recorder, `run_graph`, core assertions, demo agent — 10 tests on a demo agent passing in live mode.
+
+**Status: met (2026-10-22).** Both halves are done and verified: the framework-agnostic data model/assertion API, and the LangGraph-specific recorder/runner/interceptors/plugin/demo agent.
+
+- [x] `core/trajectory.py` — `LLMCall`, `ToolCall`, `Step`, `Trajectory` dataclasses plus derived properties (`path`, `visits`, `tool_calls`, `llm_calls`, `final_message`, `cost_usd`, `latency_s`, `tokens_total`). Deliberate fix versus the original architecture plan: `cost_usd` is a field precomputed per `LLMCall`, not something `Trajectory` computes by reaching into a pricing table — the original plan would have made `core` depend on the LangGraph-specific layer, breaking the project's own layering rule. 7 tests, see [Core concepts](../guide/trajectory-model.md).
+- [x] `core/errors.py` — `TrajectoryAssertionError` (subclasses `AssertionError` so `pytest.raises(AssertionError)` still catches it) plus an index-by-index path diff formatter, so a path mismatch reads as a diff, not two dumped lists.
+- [x] `core/matchers.py` — `any_str()`, the one matcher the architecture plan actually names; a `Matcher` base class ready for more the day a real test needs one.
+- [x] `core/assertions.py` — all 12 `assert_*` functions. Two deliberate scope decisions versus the original plan, both documented on [Assertions](../guide/assertions.md): `assert_path`'s `...` gap supports exactly one gap (a second raises `ValueError` rather than guessing which gap a mismatch belongs to), and `assert_retries` specifically means "a node re-entered after one of its own tool calls errored," not just "visited more than once" — distinct from `assert_visits`. The 12th, `assert_tool_calls_match`, is adopted deliberately from `langchain-ai/agentevals`' own trajectory-match evaluator (strict/unordered/subset/superset modes) rather than invented. 30 tests.
+- [x] `frameworks/base.py` — the `FrameworkRunner` Protocol, built *before* the LangGraph implementation below. Added to the plan on 2026-10-21 specifically so v0.4's CrewAI/AutoGen support (see [Multi-framework support](../guide/multi-framework.md)) is a new package later, not a refactor of a shipped one. `src/graphtrace/py.typed` added alongside it (PEP 561 marker, so the Protocol type-checks for an external implementer) — proactively, since this project has no `mypy` wired up yet to actually confirm the Protocol is satisfied correctly; see [Contributing](contributing.md).
+- [x] `frameworks/pricing.py` — token → USD table, sets `LLMCall.cost_usd` at record time.
+- [x] `frameworks/langgraph/interceptors.py` — patches `BaseChatModel.invoke`/`ainvoke` and `BaseTool.invoke`/`ainvoke`. **Corrected from the original plan's `_generate`/`_run`**: every concrete chat model (OpenAI's, Anthropic's, LangChain's own `GenericFakeChatModel`) overrides `_generate` itself, so patching the base class's version intercepts nothing real — confirmed by hand before trusting it. Attribution uses `config["metadata"]["langgraph_checkpoint_ns"]` (a `"{node}:{task_id}"` string LangGraph itself attaches), **not** the originally-planned `contextvars` — a ContextVar set while consuming the event stream doesn't survive into the `ThreadPoolExecutor` worker thread LangGraph actually runs parallel nodes on, confirmed with a `threading.current_thread()` probe before relying on it.
+- [x] `frameworks/langgraph/recorder.py` — turns LangGraph's `debug` stream into `Step`s (subscribing to `debug` alone; `updates` turned out to duplicate `task_result.result` exactly). Added a `flush()` step and resume-dedup logic beyond the original design: a step paused on an interrupt never gets a settling `checkpoint` event, and resuming re-runs it under the *same* task id, which would otherwise show up as a duplicate.
+- [x] `frameworks/langgraph/runner.py` — `run_graph()` and `arun_graph()`.
+- [x] `plugin.py` — pytest entry point (`pytest11`), `run_graph` fixture. Scope reduced from the original plan: `--gt-mode` and the `cassette`/`judge` fixtures aren't added yet since they'd do nothing today.
+- [x] `examples/refund_agent/` — a demo agent to record and assert against for real. Writing its tests caught a real bug in the agent itself: `refund` unconditionally refunded regardless of whether the human approved, a missing conditional edge.
+
+**61 tests pass today** (`pytest` from a clean `pip install -e ".[dev]"`) — full regression, every file, including 24 new tests against real compiled LangGraph runs (not just the hand-built fixtures core/assertions use). See [Installation](../getting-started/installation.md) to verify this yourself.
+
+## Week 2+ — not started
+
+Record/replay cassettes, request matching, normalizers, budgets config, the judge contract, trace-to-test importers, the CLI, and the HTML report are all still at the design stage. See [Recording & replay](../guide/recording-and-replay.md), [Judge & calibration](../guide/judge-and-calibration.md), [Trace-to-test](../guide/trace-to-test.md), [Configuration](../guide/configuration.md), and [Report & CI](../guide/report-and-ci.md) for scope.
+
+## v0.2 — not started, not scheduled for v0.1
+
+Four pieces, all building on the already-shipped core rather than needing new infrastructure: the security test pack ([scope](../guide/security-test-pack.md)), observability export ([scope](../guide/observability-export.md)), [cut-point replay](../guide/cut-point-replay.md) (adopted from Chronicle, Microsoft, arXiv 2609.20625 — replay a recorded incident up to where it broke, then run the fix live from there), and statistical live-mode verification (adopted from AgentAssay, arXiv 2603.02601 — a Wilson-interval Pass/Fail/Inconclusive verdict across N real trials, so a single flaky nightly run stops being the whole story; see [Recording & replay](../guide/recording-and-replay.md#statistical-live-mode-verification-v02)).
+
+## v0.4 — not started, not scheduled for v0.1-v0.3
+
+CrewAI and AutoGen support ([scope](../guide/multi-framework.md)) — gated on v0.1 shipping first. Unlike v0.2's two features, this one required a real architecture decision made *now*, in v0.1: `runtime/` was never built as a flat, LangGraph-only package — it's `frameworks/base.py` (a shared Protocol) + `frameworks/langgraph/` from day one, so CrewAI/AutoGen land as new sibling packages in v0.4, not a rename of something already shipped.
+
+## Full internal build plan
+
+The complete architecture — component diagrams, package layout, the cassette format, the judge contract, build order — lives in the project's own `Plan/graphtrace.md` (not published here; it's written for the person building graphtrace, not for the end-user guide you're reading now).

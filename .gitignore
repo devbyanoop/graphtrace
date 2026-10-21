@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+reports/
+.coverage
+
+# Internal planning doc -- not meant for the public repo.
+Plan/
+
+# MkDocs build output (published separately, not committed to main)
+site/
+
+# Local secrets/config -- .env.example (names only, no values) is committed instead.
+.env
