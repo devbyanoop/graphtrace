@@ -71,7 +71,7 @@ class Trajectory:
     steps: list[Step]
     final_state: dict[str, Any]
     interrupted: bool
-    mode: Literal["record", "replay", "live"]
+    mode: Literal["record", "replay", "record_missing", "live"]
 
     @property
     def path(self) -> list[str]:

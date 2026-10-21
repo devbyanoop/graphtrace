@@ -5,33 +5,85 @@
 ```python
 from graphtrace import run_graph
 
-traj = run_graph(graph, inputs, cassette="unused", resume=[True])
+traj = run_graph(graph, inputs, cassette="tests/cassettes/my_test.yaml", mode="record", resume=[True])
 ```
 
-`run_graph(graph, inputs, *, cassette, config=None, thread_id="gc-test", resume=None) -> Trajectory` (and an async `arun_graph`) drives a compiled LangGraph via `graph.stream(..., stream_mode=["debug"], subgraphs=True)`, feeding every event to a recorder that builds up a [`Trajectory`](trajectory-model.md). A `MemorySaver` checkpointer is attached automatically if the graph doesn't already have one. `resume` is a list of values fed to successive human-in-the-loop interrupts, one per pause, in order — if the graph pauses and there's no next value queued, `run_graph` stops there and returns with `interrupted=True`.
+`run_graph(graph, inputs, *, cassette, config=None, thread_id="gc-test", resume=None, mode=None) -> Trajectory` (and an async `arun_graph`) drives a compiled LangGraph via `graph.stream(..., stream_mode=["debug"], subgraphs=True)`, feeding every event to a recorder that builds up a [`Trajectory`](trajectory-model.md). A `MemorySaver` checkpointer is attached automatically if the graph doesn't already have one. `resume` is a list of values fed to successive human-in-the-loop interrupts, one per pause, in order — if the graph pauses and there's no next value queued, `run_graph` stops there and returns with `interrupted=True`.
 
-Verified against real compiled graphs, not just hand-built `Trajectory` fixtures: linear paths, parallel fan-out, loops/retries, interrupt-and-resume (including that a resumed node doesn't show up twice), tool-call and LLM-call capture, and a tool error that propagates or that a node catches — 24 tests in `tests/test_runner.py` and `tests/test_demo_agent.py`. **Not yet tested**: subgraphs. `namespace` is threaded through from LangGraph's own `subgraphs=True` output, but nothing in the current test suite actually nests a subgraph inside a node to confirm it comes through correctly — a real gap, not an oversight being hidden.
+`mode` resolves via an explicit argument, then the `GRAPHTRACE_MODE` environment variable, then `"live"` — unchanged Week 1 behaviour unless something actually opts in. Through the `run_graph` **pytest fixture**, it also resolves from `pytest --gt-mode=<mode>`.
 
-## `cassette` is accepted but not used yet
+**Not yet tested**: subgraphs. `namespace` is threaded through from LangGraph's own `subgraphs=True` output, but nothing in the current test suite actually nests a subgraph inside a node to confirm it comes through correctly — a real gap, not an oversight being hidden.
+
+## The four modes — real, tested
+
+| Mode | LLM/tool calls? | Cassette |
+| --- | --- | --- |
+| `replay` | No | Must exist; a missing entry raises `CassetteMismatchError` |
+| `record` | Yes | Overwritten |
+| `record_missing` | Only for unmatched requests | Appended |
+| `live` (default) | Yes | Ignored entirely |
 
 ```python
-run_graph(graph, inputs, cassette="incident_2026_11_03.yaml")
+# Record once (real calls happen, a cassette gets written):
+run_graph(graph, inputs, cassette="tests/cassettes/happy_path.yaml", mode="record")
+
+# Replay it later -- zero real calls, verified by patching the real underlying
+# LangChain methods to raise if they're ever actually reached (tests/test_mode_aware_interceptors.py):
+run_graph(graph, inputs, cassette="tests/cassettes/happy_path.yaml", mode="replay")
 ```
 
-The parameter exists today so the signature matches what it will be once replay exists — passing it has **no effect yet**. Every call today runs the same way: real node execution, real LLM/tool calls if the graph makes any. This is Week 1's one honest, temporary scope limit, not a silent gap.
+A replayed **failure** (a tool call that errored when it was recorded) re-raises as a plain `RuntimeError` carrying the original error message — the original exception's exact type isn't recoverable once serialized to YAML, an honest, documented limitation rather than a bug. A *live* exception (not from a cassette) always keeps its real type, so a node's own `except SomeSpecificError:` still works identically in every mode.
 
-## Still planned — modes, cassettes, matching
+## Cassette format — real
+
+A real cassette, recorded from `examples/refund_agent` (field order exactly as graphtrace itself writes it, not reordered for the doc):
+
+```yaml
+version: 1
+graphtrace: 0.1.0
+recorded_at: '2026-10-21T06:57:12.584162+00:00'
+entries:
+- key: router/llm/391132dd9ec5/0
+  kind: llm
+  node: router
+  request: "[('human', 'What does the customer want for order 1234?')]"
+  latency_s: 0.0021508999925572425
+  response:
+    content: ok
+    tool_calls: []
+    usage:
+      input_tokens: 0
+      output_tokens: 0
+  model: GenericFakeChatModel
+- key: lookup_order/tool/82eee3ce806e/0
+  kind: tool
+  node: lookup_order
+  request:
+    order_id: '1234'
+  latency_s: 0.0006061000167392194
+  response:
+    status: delivered
+    amount: 49.0
+  name: get_order
+```
+
+YAML via `ruamel.yaml`'s **round-trip mode**, loaded and saved through `replay/cassette.py` — proven byte-identical on a load-then-immediately-save round trip (not just that the library loaded without erroring), which is what actually makes `record_missing` growing a cassette produce a clean PR diff: untouched entries stay untouched bytes.
+
+The matching key is `node/kind/hash(normalized request)/occurrence` (`replay/matcher.py`) — `occurrence` is what lets the same node+request pair appear twice in one run (a retry loop) and still match its own two separate recorded entries, in order, confirmed with a real recorded-then-replayed retry sequence.
+
+**A real bug found and fixed along the way**: `ruamel.yaml`'s round-trip mode wraps a loaded float (`49.0`) in a `ScalarFloat` subclass, to preserve its exact on-disk formatting. That's essential for the byte-identical round-trip above — but the *same* value, handed back into a replayed tool call, flows straight into LangGraph's own state and gets `msgpack`-serialized by its checkpointer, which doesn't know what a `ScalarFloat` is and raises `TypeError: Type is not msgpack serializable`. Confirmed by hand, not assumed. Fixed with `replay/cassette.to_plain_python()`, called only on a value about to flow back into real code — never on a value still destined for the cassette file itself, which is what keeps the round-trip guarantee above true at the same time.
+
+## Still planned
 
 !!! warning "Planned — not built yet"
-    Nothing below this line is implemented.
 
-- Interceptors patch `BaseChatModel.invoke`/`ainvoke` and `BaseTool.invoke`/`ainvoke` (**corrected from the original design's `_generate`/`_run`** — see the roadmap for why) while a node is active, capturing model/tool calls without the graph's own code changing. This part **is** built (see above) — what's still planned is everything cassette-related below.
-- Five modes: `replay` (default in CI — no real LLM/tool calls, cassette entries must already exist), `record` (overwrites a cassette), `record_missing` (appends only unmatched requests), `live` (what every call does today, by default), `cut` (v0.2 — see [Cut-point replay](cut-point-replay.md)).
-- Cassettes are YAML, keyed by `node + kind + hash(normalized request) + occurrence index`, with a redaction hook masking secrets/PII before anything is written to disk.
+- **Redaction.** The architecture plan's own `redact: [api_key, email, phone]` config field isn't enforced by anything yet — a recorded cassette today contains whatever the real request/response actually held, unmasked. Treat any cassette containing real secrets as sensitive until this exists.
+- **Normalization rules beyond the built-in timestamp/UUID pair** (`core/normalize.py` has the mechanism; `graphtrace.yaml`'s `replay.normalize` list of custom rules isn't wired through to it yet).
+- `cut` mode (v0.2 — see [Cut-point replay](cut-point-replay.md)).
 
 ## Why this was the hard part
 
-Turning a *real* LangGraph run into a correct `Trajectory` needed two real corrections to the original design along the way — not assumptions that happened to be wrong in theory, but things confirmed wrong by running real code: the originally-planned `contextvars` call-attribution mechanism doesn't survive LangGraph's actual `ThreadPoolExecutor`-based parallel execution, and the originally-planned `_generate`/`_agenerate` patch target is never actually called by any real chat model. Both are detailed in the project's internal plan doc.
+Turning a *real* LangGraph run into a correct `Trajectory` needed two real corrections to the original design along the way — not assumptions that happened to be wrong in theory, but things confirmed wrong by running real code: the originally-planned `contextvars` call-attribution mechanism doesn't survive LangGraph's actual `ThreadPoolExecutor`-based parallel execution, and the originally-planned `_generate`/`_agenerate` patch target is never actually called by any real chat model. Both are detailed in the project's internal plan doc, along with the `ScalarFloat` finding above.
 
 ## Statistical live-mode verification (v0.2)
 

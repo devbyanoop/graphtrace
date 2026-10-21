@@ -31,7 +31,7 @@ Verify the install:
 pytest
 ```
 
-61 tests should pass — the core data model and assertion API (37, no LangGraph involved, see [Core concepts](../guide/trajectory-model.md)), plus 24 more against real compiled LangGraph runs (the recorder, interceptors, and the `examples/refund_agent` demo agent, see [Recording & replay](../guide/recording-and-replay.md)).
+103 tests should pass — the core data model and assertion API (37, no LangGraph involved, see [Core concepts](../guide/trajectory-model.md)), 24 against real compiled LangGraph runs (the recorder, interceptors, and the `examples/refund_agent` demo agent), and 42 more against record/replay cassettes, the `--gt-mode` pytest flag, and `graphtrace.yaml` config loading (see [Recording & replay](../guide/recording-and-replay.md) and [Configuration](../guide/configuration.md)). All offline, in about two seconds.
 
 ## Planned extras
 

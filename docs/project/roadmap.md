@@ -32,11 +32,25 @@ This page is the single source of truth for "is X actually built yet?" — updat
 - [x] `plugin.py` — pytest entry point (`pytest11`), `run_graph` fixture. Scope reduced from the original plan: `--gt-mode` and the `cassette`/`judge` fixtures aren't added yet since they'd do nothing today.
 - [x] `examples/refund_agent/` — a demo agent to record and assert against for real. Writing its tests caught a real bug in the agent itself: `refund` unconditionally refunded regardless of whether the human approved, a missing conditional edge.
 
-**61 tests pass today** (`pytest` from a clean `pip install -e ".[dev]"`) — full regression, every file, including 24 new tests against real compiled LangGraph runs (not just the hand-built fixtures core/assertions use). See [Installation](../getting-started/installation.md) to verify this yourself.
+## Week 2 — record, replay, cassettes, config
 
-## Week 2+ — not started
+**Goal (per the build plan):** 20+ tests pass offline (no real LLM/tool calls) in under 30 seconds.
 
-Record/replay cassettes, request matching, normalizers, budgets config, the judge contract, trace-to-test importers, the CLI, and the HTML report are all still at the design stage. See [Recording & replay](../guide/recording-and-replay.md), [Judge & calibration](../guide/judge-and-calibration.md), [Trace-to-test](../guide/trace-to-test.md), [Configuration](../guide/configuration.md), and [Report & CI](../guide/report-and-ci.md) for scope.
+**Status: met (2026-10-22).**
+
+- [x] `replay/cassette.py` — YAML cassettes via `ruamel.yaml` round-trip mode, proven byte-identical on a load-then-save round trip. **Real bug found along the way**: round-trip mode wraps a loaded float in a `ScalarFloat` subclass (to preserve exact formatting), which then broke a replayed tool result the moment it flowed into LangGraph's own state and got `msgpack`-serialized by its checkpointer. Fixed with `to_plain_python()`, applied only when a value is about to flow back into real code, never on a value still destined for the cassette file.
+- [x] `replay/matcher.py` — `node/kind/hash(request)/occurrence` keys; two identical requests from the same node (a retry) match their own two recorded entries in order.
+- [x] `replay/modes.py`, `replay/context.py`, `replay/engine.py` — `resolve_call()`, the generic record/replay decision tree, kept framework-agnostic (plain YAML-safe data in and out) so a future CrewAI/AutoGen interceptor (v0.4) reuses it unmodified.
+- [x] `frameworks/langgraph/interceptors.py`/`runner.py` made mode-aware. Verified by recording the Week 1 demo agent once, then replaying it with the *real* underlying `BaseChatModel.invoke`/`BaseTool.invoke` patched to raise if ever actually reached — zero real calls, proven by direct observation, not inferred from the replay logic's own correctness.
+- [x] `core/normalize.py` (the built-in timestamp/UUID rules), `core/budgets.py` (the config-driven default-budget check).
+- [x] `config.py` — `graphtrace.yaml` loading, pydantic, strict. `framework: crewai` (not valid until v0.4) is rejected at load time, not just documented as unsupported.
+- [x] `plugin.py` extended: `--gt-mode` CLI flag, cassette directory from config, and the `run_graph` fixture now auto-applies `budgets.default` after every call — a test that never calls `assert_budget(...)` itself still fails if the configured default is exceeded.
+
+**103 tests pass today** (`pytest` from a clean `pip install -e ".[dev]"`) — full regression, every file, in about 2 seconds. See [Installation](../getting-started/installation.md) to verify this yourself.
+
+## Week 3+ — not started
+
+The judge contract, trace-to-test importers, the CLI, and the HTML report are all still at the design stage. See [Judge & calibration](../guide/judge-and-calibration.md), [Trace-to-test](../guide/trace-to-test.md), and [Report & CI](../guide/report-and-ci.md) for scope. Redaction and custom normalize rules (both part of Week 2's original scope) are also still not built — see [Recording & replay](../guide/recording-and-replay.md) for that specific gap.
 
 ## v0.2 — not started, not scheduled for v0.1
 

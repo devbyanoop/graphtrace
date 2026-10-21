@@ -1,5 +1,6 @@
-"""Capture LLM and tool calls made while a LangGraph node is running, and attribute
-each one to the exact task (node execution) that made it -- without changing the
+"""Capture LLM and tool calls made while a LangGraph node is running, attribute
+each one to the exact task (node execution) that made it, and route the actual
+call through the active replay mode (replay/engine.py) -- without changing the
 graph's own code at all.
 
 How attribution actually works (verified against real langgraph 1.2 / langchain-core
@@ -37,6 +38,12 @@ tools: patch `BaseChatModel.invoke`/`ainvoke` instead, the same way
 `BaseTool.invoke`/`ainvoke` are patched below -- neither is something a concrete
 subclass overrides (confirmed by hand for `GenericFakeChatModel`), and both carry
 the same `config["metadata"]` correlation key straight through.
+
+Record/replay (Week 2): each patched method wraps its real call in
+`replay.engine.resolve_call`, converting its own result to/from a plain,
+YAML-safe shape first -- `resolve_call` itself never sees an `AIMessage` or
+`ToolMessage` object, only dicts/strings/numbers, which is what keeps it
+framework-agnostic (see that module's own docstring).
 """
 
 from __future__ import annotations
@@ -50,10 +57,13 @@ from contextlib import contextmanager
 from typing import Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.tools import BaseTool
 
 from graphtrace.core.trajectory import LLMCall, ToolCall
 from graphtrace.frameworks.pricing import cost_for_call
+from graphtrace.replay.context import ReplayContext
+from graphtrace.replay.engine import resolve_call
 
 
 def _task_id_from_checkpoint_ns(checkpoint_ns: str | None) -> str | None:
@@ -73,11 +83,50 @@ def _hash_messages(messages: Any) -> str:
     """A stable-enough id for an LLM call's input, for Trajectory.LLMCall.input_hash.
 
     Plain str() of a list of LangChain message objects is deterministic given the
-    same content (their __repr__ includes field values), which is all this needs to
-    be useful for -- matching "was this the same request" later (replay/matcher.py,
-    Week 2), not cryptographic security.
+    same content (their __repr__ includes field values), which is all this needs
+    to be useful for -- matching "was this the same request" (replay/matcher.py
+    does the same stringification independently), not cryptographic security.
     """
     return hashlib.sha256(str(messages).encode("utf-8")).hexdigest()
+
+
+def _serialize_llm_response(message: Any) -> dict[str, Any]:
+    """AIMessage -> a plain, YAML-safe dict, for `resolve_call`/the cassette."""
+    usage = getattr(message, "usage_metadata", None) or {}
+    return {
+        "content": message.content,
+        "tool_calls": list(getattr(message, "tool_calls", None) or []),
+        "usage": {"input_tokens": usage.get("input_tokens", 0), "output_tokens": usage.get("output_tokens", 0)},
+    }
+
+
+def _deserialize_llm_response(data: dict[str, Any]) -> AIMessage:
+    """The inverse of `_serialize_llm_response` -- used on a replay hit, so the
+    rest of the graph sees a real AIMessage either way, live or replayed."""
+    usage = data.get("usage") or {}
+    input_tokens = usage.get("input_tokens", 0)
+    output_tokens = usage.get("output_tokens", 0)
+    return AIMessage(
+        content=data.get("content", ""),
+        tool_calls=list(data.get("tool_calls") or []),
+        usage_metadata={"input_tokens": input_tokens, "output_tokens": output_tokens, "total_tokens": input_tokens + output_tokens},
+    )
+
+
+def _serialize_tool_result(result: Any) -> Any:
+    """Most tool results are already YAML-safe (a plain dict/str/number) --
+    passed through unchanged. `BaseTool.invoke()` called with a ToolCall-shaped
+    input (what LangGraph's real ToolNode always passes, confirmed by hand)
+    returns a `ToolMessage` instead, which needs its own explicit conversion."""
+    if isinstance(result, ToolMessage):
+        return {"_type": "ToolMessage", "content": result.content, "tool_call_id": result.tool_call_id, "name": result.name}
+    return result
+
+
+def _deserialize_tool_result(data: Any) -> Any:
+    if isinstance(data, dict) and data.get("_type") == "ToolMessage":
+        return ToolMessage(content=data["content"], tool_call_id=data.get("tool_call_id", ""), name=data.get("name"))
+    return data
 
 
 class CallBuffer:
@@ -113,9 +162,10 @@ class CallBuffer:
 
 
 @contextmanager
-def intercept(buffer: CallBuffer) -> Iterator[None]:
+def intercept(buffer: CallBuffer, replay_ctx: ReplayContext) -> Iterator[None]:
     """Patch LangChain's chat-model and tool call surfaces for the duration of one
-    run_graph()/arun_graph() call, routing every real call into `buffer`.
+    run_graph()/arun_graph() call, routing every real call into `buffer`, and every
+    call's actual execution through `replay_ctx`'s active mode.
 
     Patching is undone in `finally` even if the graph run itself raises -- a test
     that never calls run_graph() must never see LangChain's model/tool classes
@@ -128,35 +178,83 @@ def intercept(buffer: CallBuffer) -> Iterator[None]:
     orig_ainvoke = BaseTool.ainvoke
 
     def patched_chat_invoke(self: BaseChatModel, input, config=None, **kwargs):
-        start = time.perf_counter()
-        result = orig_chat_invoke(self, input, config, **kwargs)
-        _record_llm_call(self, input, config, result, time.perf_counter() - start, buffer)
+        metadata = (config or {}).get("metadata") or {}
+        node = metadata.get("langgraph_node", "?")
+        model_name = getattr(self, "model_name", None) or getattr(self, "model", None) or type(self).__name__
+
+        def real_call():
+            return _serialize_llm_response(orig_chat_invoke(self, input, config, **kwargs))
+
+        plain_response, latency_s = resolve_call(replay_ctx, node, "llm", str(input), real_call, extra={"model": model_name})
+        result = _deserialize_llm_response(plain_response)
+        _record_llm_call(self, input, config, result, latency_s, buffer)
         return result
 
     async def patched_chat_ainvoke(self: BaseChatModel, input, config=None, **kwargs):
-        start = time.perf_counter()
-        result = await orig_chat_ainvoke(self, input, config, **kwargs)
-        _record_llm_call(self, input, config, result, time.perf_counter() - start, buffer)
+        metadata = (config or {}).get("metadata") or {}
+        node = metadata.get("langgraph_node", "?")
+        model_name = getattr(self, "model_name", None) or getattr(self, "model", None) or type(self).__name__
+
+        async def real_call_async():
+            return _serialize_llm_response(await orig_chat_ainvoke(self, input, config, **kwargs))
+
+        # resolve_call is sync -- in "live" mode (the only mode an async real call
+        # can actually take), this awaits inline before resolve_call ever measures
+        # latency around it, so timing is still correct. Replay/record paths never
+        # call real_call_async at all.
+        if replay_ctx.mode == "live":
+            start = time.perf_counter()
+            plain_response = await real_call_async()
+            latency_s = time.perf_counter() - start
+        else:
+            plain_response, latency_s = resolve_call(
+                replay_ctx, node, "llm", str(input),
+                lambda: _serialize_llm_response(orig_chat_invoke(self, input, config, **kwargs)),
+                extra={"model": model_name},
+            )
+        result = _deserialize_llm_response(plain_response)
+        _record_llm_call(self, input, config, result, latency_s, buffer)
         return result
 
     def patched_invoke(self: BaseTool, input, config=None, **kwargs):
+        metadata = (config or {}).get("metadata") or {}
+        node = metadata.get("langgraph_node", "?")
+        args = input.get("args", input) if isinstance(input, dict) and "args" in input else input
+
+        def real_call():
+            return _serialize_tool_result(orig_invoke(self, input, config, **kwargs))
+
         start = time.perf_counter()
         try:
-            result = orig_invoke(self, input, config, **kwargs)
+            plain_response, latency_s = resolve_call(replay_ctx, node, "tool", args, real_call, extra={"name": self.name})
         except Exception as exc:
             _record_tool_call(self, input, config, result=None, error=str(exc), latency_s=time.perf_counter() - start, buffer=buffer)
             raise
-        _record_tool_call(self, input, config, result=result, error=None, latency_s=time.perf_counter() - start, buffer=buffer)
+        result = _deserialize_tool_result(plain_response)
+        _record_tool_call(self, input, config, result=result, error=None, latency_s=latency_s, buffer=buffer)
         return result
 
     async def patched_ainvoke(self: BaseTool, input, config=None, **kwargs):
+        metadata = (config or {}).get("metadata") or {}
+        node = metadata.get("langgraph_node", "?")
+        args = input.get("args", input) if isinstance(input, dict) and "args" in input else input
+
         start = time.perf_counter()
         try:
-            result = await orig_ainvoke(self, input, config, **kwargs)
+            if replay_ctx.mode == "live":
+                plain_response = _serialize_tool_result(await orig_ainvoke(self, input, config, **kwargs))
+                latency_s = time.perf_counter() - start
+            else:
+                plain_response, latency_s = resolve_call(
+                    replay_ctx, node, "tool", args,
+                    lambda: _serialize_tool_result(orig_invoke(self, input, config, **kwargs)),
+                    extra={"name": self.name},
+                )
         except Exception as exc:
             _record_tool_call(self, input, config, result=None, error=str(exc), latency_s=time.perf_counter() - start, buffer=buffer)
             raise
-        _record_tool_call(self, input, config, result=result, error=None, latency_s=time.perf_counter() - start, buffer=buffer)
+        result = _deserialize_tool_result(plain_response)
+        _record_tool_call(self, input, config, result=result, error=None, latency_s=latency_s, buffer=buffer)
         return result
 
     BaseChatModel.invoke = patched_chat_invoke
@@ -181,8 +279,6 @@ def _record_llm_call(model: BaseChatModel, input, config, result, latency_s: flo
         # record. Not an error: graphtrace only records what a graph run produces.
         return
 
-    # BaseChatModel.invoke() returns the AIMessage directly (unlike the lower-level
-    # _generate(), which returns a ChatResult wrapping it) -- confirmed by hand.
     usage = getattr(result, "usage_metadata", None) or {}
     prompt_tokens = usage.get("input_tokens", 0)
     completion_tokens = usage.get("output_tokens", 0)

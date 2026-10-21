@@ -17,6 +17,8 @@ authors = [{ name = "Anoop Singh" }]
 dependencies = [
     "langgraph>=1.2,<2",
     "langchain-core>=1.6,<2",
+    "ruamel.yaml>=0.18,<0.19",
+    "pydantic>=2,<3",
 ]
 
 [project.optional-dependencies]
