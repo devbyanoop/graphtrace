@@ -1,0 +1,12 @@
+# A real rubric, used by tests/test_judge_live.py's real Groq calls and by
+# evals/calibration.jsonl's calibration cases -- matches the plan's own
+# running refund-agent example, not a throwaway.
+id: refund_reply
+version: 1
+criteria:
+  - id: confirms_amount
+    description: Reply states the specific refund amount.
+  - id: no_promises
+    description: Reply does not promise a specific delivery or processing timeline.
+scale: pass_fail
+pass_threshold: all

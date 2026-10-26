@@ -1,13 +1,20 @@
 """Langfuse trace importer.
 
-Field names below match Langfuse's own documented "observations" model as of
-this writing (a trace has `observations`, each one typed `GENERATION` for an
-LLM call or `SPAN` for everything else; a generation carries `model`/`usage`).
-Langfuse's export format has moved fast (a v4 data model and "enriched
-observations" shipped in 2026) -- **verify field names against a real export
-from your own project before trusting this against anything beyond the bundled
-test fixture**. This is the honest state of things, not a guess presented as
-certain.
+Field names below match Langfuse's own documented "observations" model --
+re-confirmed directly against the real, current `GET /api/public/v2/observations`
+reference (type, name, input, output, startTime, endTime, model, level,
+statusMessage all fetched and checked individually, not assumed from memory).
+What's still *not* independently verified: whether a real, hand-assembled
+trace-export file actually nests `observations` directly inside the trace
+object the way this importer expects -- the real API exposes observations via
+their own separate endpoint, filtered by trace id, not embedded in a trace
+response; this importer's nested-`observations` shape is this project's own
+reasonable assumption about how someone would bundle a trace + its
+observations into one file for `graphtrace from-trace`, not a literal
+single real API response format. Langfuse's export format has also moved
+fast (a v4 data model and "enriched observations" shipped in 2026) -- verify
+field names against your own real export if a trace doesn't parse cleanly.
+This is the honest state of things, not a guess presented as certain.
 """
 
 from __future__ import annotations

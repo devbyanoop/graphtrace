@@ -216,6 +216,140 @@ def test_run_graph_loop_visits_same_node_multiple_times_with_distinct_steps():
     assert [s.state_after["x"] for s in traj.steps] == [1, 2, 3]
 
 
+def test_run_graph_subgraph_node_produces_transparent_enter_exit_and_inner_steps():
+    """A node whose value is itself a compiled graph -- confirmed by hand
+    (frameworks/langgraph/recorder.py's own docstring has the full trace)
+    that its own task/task_result pair looks identical in shape to an
+    ordinary node's, and the only way to know it wraps a subgraph is a child
+    event arriving at a deeper namespace. The subgraph is NOT collapsed into
+    one opaque step -- a real tool call made by its own inner node (`inner_a`
+    below) is attributed to that inner node directly (confirmed separately,
+    by hand, that langgraph_checkpoint_ns chains as "sub:<id>|inner_a:<id>",
+    and rsplit(':', 1) correctly extracts the innermost id regardless) --
+    collapsing it would silently drop that call from the trajectory."""
+
+    class InnerState(TypedDict):
+        x: int
+
+    @tool
+    def add_one(n: int) -> int:
+        """Add one to n."""
+        return n + 1
+
+    def inner_a(state, config):
+        return {"x": add_one.invoke({"n": state["x"]}, config)}
+
+    def inner_b(state):
+        return {"x": state["x"] + 10}
+
+    inner = StateGraph(InnerState)
+    inner.add_node("inner_a", inner_a)
+    inner.add_node("inner_b", inner_b)
+    inner.add_edge(START, "inner_a")
+    inner.add_edge("inner_a", "inner_b")
+    inner.add_edge("inner_b", END)
+
+    class OuterState(TypedDict):
+        x: int
+
+    def outer_start(state):
+        return {"x": state["x"] + 100}
+
+    def outer_end(state):
+        return {"x": state["x"] + 1000}
+
+    outer = StateGraph(OuterState)
+    outer.add_node("outer_start", outer_start)
+    outer.add_node("sub", inner.compile())
+    outer.add_node("outer_end", outer_end)
+    outer.add_edge(START, "outer_start")
+    outer.add_edge("outer_start", "sub")
+    outer.add_edge("sub", "outer_end")
+    outer.add_edge("outer_end", END)
+
+    traj = run_graph(outer.compile(), {"x": 0}, cassette="unused")
+
+    # subgraph_enter comes BEFORE its children (eagerly emitted the moment a
+    # child reveals the wrapping task is a subgraph), subgraph_exit comes
+    # after them (deferred until the wrapping task's own checkpoint, which
+    # genuinely can't settle before the children do).
+    assert traj.path == ["outer_start", "sub", "inner_a", "inner_b", "sub", "outer_end"]
+    kinds = [s.kind for s in traj.steps]
+    assert kinds == ["node", "subgraph_enter", "node", "node", "subgraph_exit", "node"]
+    assert traj.final_state == {"x": 1111}
+
+    # The real tool call made inside inner_a is attributed to inner_a's own
+    # step, not lost, and not misattributed to "sub".
+    inner_a_step = next(s for s in traj.steps if s.node == "inner_a")
+    assert [c.name for c in inner_a_step.tool_calls] == ["add_one"]
+    assert inner_a_step.tool_calls[0].result == 101
+    sub_exit_step = next(s for s in traj.steps if s.kind == "subgraph_exit")
+    assert sub_exit_step.tool_calls == []
+
+    # subgraph_enter is a true no-op marker: state unchanged at that instant.
+    enter_step = next(s for s in traj.steps if s.kind == "subgraph_enter")
+    assert enter_step.state_before == enter_step.state_after == {"x": 100}
+    # subgraph_exit's state_after reflects everything the subgraph actually did.
+    assert sub_exit_step.state_before == {"x": 100}
+    assert sub_exit_step.state_after == {"x": 111}
+
+
+def test_run_graph_subgraph_running_in_parallel_with_another_node_does_not_corrupt_its_state():
+    """The real bug this project's own recorder had before being fixed: a
+    subgraph's own inner checkpoints are a *different* graph's state
+    entirely, and used to overwrite the single, global `last_values` the
+    instant they arrived. Harmless for a subgraph running alone (the outer
+    graph's own next checkpoint always arrives later and corrects it before
+    anything reads it again), but a real risk the moment a subgraph runs
+    *concurrently* with another outer-level node, which is exactly this
+    scenario -- confirmed to actually matter, not a theoretical worry."""
+
+    class InnerState(TypedDict):
+        y: int
+
+    def inner_only(state):
+        return {"y": state["y"] + 1}
+
+    inner = StateGraph(InnerState)
+    inner.add_node("inner_only", inner_only)
+    inner.add_edge(START, "inner_only")
+    inner.add_edge("inner_only", END)
+
+    class OuterState(TypedDict):
+        start: int
+        y: int
+        sibling: str
+
+    def start(state):
+        return {"start": 1}
+
+    def sibling(state):
+        return {"sibling": "ran"}
+
+    outer = StateGraph(OuterState)
+    outer.add_node("start", start)
+    outer.add_node("sub", inner.compile())
+    outer.add_node("sibling", sibling)
+    outer.add_edge(START, "start")
+    outer.add_edge("start", "sub")
+    outer.add_edge("start", "sibling")
+    outer.add_edge("sub", END)
+    outer.add_edge("sibling", END)
+
+    traj = run_graph(outer.compile(), {"start": 0, "y": 0, "sibling": ""}, cassette="unused")
+
+    # The outer-level "sibling" node's own state_after must come from the
+    # OUTER graph's own checkpoint, never from the subgraph's own inner
+    # checkpoint ({"y": 0}, an entirely different graph's partial state)
+    # committing it early just because both arrived close together. Confirmed
+    # by hand this is exactly where the pre-fix bug actually landed (not
+    # state_before, which a pending step already captures before any
+    # subgraph event can interfere) -- with the bug present, this assertion
+    # fails with sibling_step.state_after == {"y": 0}.
+    sibling_step = next(s for s in traj.steps if s.node == "sibling")
+    assert sibling_step.state_after == {"start": 1, "y": 1, "sibling": "ran"}
+
+
 def test_run_graph_interrupt_without_resume_returns_interrupted_trajectory():
     class State(TypedDict, total=False):
         approved: bool

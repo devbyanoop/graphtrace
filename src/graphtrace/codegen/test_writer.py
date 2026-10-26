@@ -112,14 +112,23 @@ def _normalize_llm_response(response: Any) -> dict[str, Any]:
     (`{"content", "tool_calls", "usage": {"input_tokens", "output_tokens"}}`).
 
     A source platform's own "output" field is not guaranteed to already be
-    shaped this way -- it can just as easily be a plain string (confirmed as
-    a real case: OTel/OpenInference's `output.value` attribute is a string by
-    convention). Anything already shaped like an LLM response (has "content")
-    is normalized field-by-field, with Langfuse's own camelCase usage field
-    names (`promptTokens`/`completionTokens`) covered alongside this
-    project's own snake_case convention; anything else is wrapped wholesale
-    into `content`, which is always a safe fallback since `content` is all
-    `assert_path`/the replayed AIMessage genuinely need to exist.
+    shaped this way. Three real shapes are handled, not just assumed:
+    - already `{"content": ...}` -- normalized field-by-field, with Langfuse's
+      own camelCase usage field names (`promptTokens`/`completionTokens`)
+      covered alongside this project's own snake_case convention.
+    - a plain string -- confirmed real: OTel/OpenInference's `output.value`
+      attribute is a string by convention.
+    - a list of `{"role": ..., "content": ...}` messages -- confirmed real:
+      `importers/otel.py`'s own flattened `llm.output_messages` reconstruction
+      produces exactly this shape. The *last* message's content is what a
+      real LangChain `AIMessage.content` would hold (the model's own reply,
+      not the whole conversation) -- found and fixed after discovering the
+      otel importer could produce this shape and this function would
+      otherwise silently stringify the whole list (`"[{'role': ...}]"`)
+      instead of extracting the real text.
+    Anything else is wrapped wholesale into `content` via `str()`, which is
+    always a safe fallback since `content` is all `assert_visited`/the
+    replayed AIMessage genuinely need to exist.
     """
     if isinstance(response, dict) and "content" in response:
         usage = response.get("usage") or {}
@@ -131,6 +140,8 @@ def _normalize_llm_response(response: Any) -> dict[str, Any]:
                 "output_tokens": usage.get("output_tokens", usage.get("completionTokens", 0)),
             },
         }
+    if isinstance(response, list) and response and all(isinstance(m, dict) and "content" in m for m in response):
+        return {"content": response[-1].get("content") or "", "tool_calls": [], "usage": {"input_tokens": 0, "output_tokens": 0}}
     return {"content": "" if response is None else str(response), "tool_calls": [], "usage": {"input_tokens": 0, "output_tokens": 0}}
 
 

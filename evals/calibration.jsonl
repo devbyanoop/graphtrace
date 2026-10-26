@@ -1,0 +1,4 @@
+{"rubric": "refund_reply", "input": "Can I get a refund for my late order?", "output": "Yes, a refund of $49.00 has been issued to your original payment method.", "human": {"confirms_amount": true, "no_promises": true}}
+{"rubric": "refund_reply", "input": "I'd like a refund -- when will I see the money?", "output": "We've refunded $49.00 to your account; it will arrive within 3 to 5 business days.", "human": {"confirms_amount": true, "no_promises": false}}
+{"rubric": "refund_reply", "input": "Please refund my last order.", "output": "Your refund has been processed successfully.", "human": {"confirms_amount": false, "no_promises": true}}
+{"rubric": "refund_reply", "input": "Refund status please.", "output": "We'll get your refund sorted out by Friday at the latest.", "human": {"confirms_amount": false, "no_promises": false}}

@@ -125,6 +125,50 @@ def test_otel_importer_normalizes_llm_and_tool_spans():
     assert round(llm_span.latency_s, 2) == 0.61
 
 
+def test_otel_importer_reconstructs_flattened_chat_messages_when_input_value_is_absent():
+    """Real bug, found and fixed against the actual openinference-semantic-
+    conventions source: there is no single "llm.input_messages" attribute to
+    read -- messages are flattened per-index as "llm.input_messages.{i}.
+    message.role"/".content". An earlier version of this importer read the
+    un-flattened key directly, which never matched anything real, silently
+    falling through to input.value every time -- invisible until a trace
+    exists (like this one) where only the flattened messages are set."""
+    data = {
+        "resourceSpans": [{"scopeSpans": [{"spans": [
+            _otel_span("router", "LLM", {
+                "llm.model_name": "gpt-4o-mini",
+                "llm.input_messages.0.message.role": "system",
+                "llm.input_messages.0.message.content": "You are a refund agent.",
+                "llm.input_messages.1.message.role": "user",
+                "llm.input_messages.1.message.content": "Can I get a refund?",
+                "llm.output_messages.0.message.role": "assistant",
+                "llm.output_messages.0.message.content": "Yes, $49.00 refunded.",
+            }),
+        ]}]}]
+    }
+    normalized = OTelImporter().to_normalized(data)
+    span = normalized.spans[0]
+    assert span.request == [
+        {"role": "system", "content": "You are a refund agent."},
+        {"role": "user", "content": "Can I get a refund?"},
+    ]
+    assert span.response == [{"role": "assistant", "content": "Yes, $49.00 refunded."}]
+
+
+def test_otel_importer_prefers_input_value_over_flattened_messages_when_both_are_set():
+    data = {
+        "resourceSpans": [{"scopeSpans": [{"spans": [
+            _otel_span("router", "LLM", {
+                "input.value": "the plain summary",
+                "llm.input_messages.0.message.role": "user",
+                "llm.input_messages.0.message.content": "ignored",
+            }),
+        ]}]}]
+    }
+    normalized = OTelImporter().to_normalized(data)
+    assert normalized.spans[0].request == "the plain summary"
+
+
 def test_otel_importer_captures_an_error_status():
     data = {
         "resourceSpans": [

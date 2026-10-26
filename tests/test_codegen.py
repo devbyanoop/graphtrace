@@ -75,6 +75,23 @@ def test_generate_test_normalizes_a_bare_string_llm_response(tmp_path: Path):
     assert llm_response == {"content": "just a plain string", "tool_calls": [], "usage": {"input_tokens": 0, "output_tokens": 0}}
 
 
+def test_generate_test_normalizes_a_list_of_chat_messages_llm_response(tmp_path: Path):
+    """importers/otel.py's own flattened-message reconstruction produces a
+    list of {"role", "content"} dicts (OpenInference's real convention for
+    llm.output_messages) -- confirmed this function would otherwise silently
+    stringify the whole list instead of extracting the actual reply text."""
+    trace = NormalizedTrace(spans=[NormalizedSpan(
+        node="router", kind="llm", request="hi",
+        response=[{"role": "assistant", "content": "Yes, $49.00 refunded."}],
+        model="m",
+    )])
+    cassette_path = tmp_path / "from_trace.yaml"
+    generate_test(trace, target="my_app.graph:build_graph", test_name="t", cassette_path=cassette_path)
+
+    llm_response = load_cassette(cassette_path).entries[0]["response"]
+    assert llm_response == {"content": "Yes, $49.00 refunded.", "tool_calls": [], "usage": {"input_tokens": 0, "output_tokens": 0}}
+
+
 def test_generate_test_preserves_an_errored_span_as_a_cassette_error_entry(tmp_path: Path):
     trace = NormalizedTrace(spans=[NormalizedSpan(node="lookup_order", kind="tool", request={"order_id": "1234"}, error="order service down")])
     cassette_path = tmp_path / "from_trace.yaml"

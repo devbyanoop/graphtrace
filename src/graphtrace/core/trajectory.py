@@ -52,6 +52,14 @@ class ToolCall:
 class Step:
     """One node's execution: its state transition, plus whatever it called."""
 
+    # The order LangGraph *started* this step's task, not necessarily its
+    # position in Trajectory.steps -- a subgraph's own "subgraph_exit" step is
+    # created (and given its index) when its wrapping task starts, but only
+    # committed to `steps` after every one of its children, since a subgraph's
+    # own completion genuinely can't be known before they are. Confirmed by
+    # hand (frameworks/langgraph/recorder.py's own docstring has the full
+    # trace); not asserted on by any assert_* function today, which all key
+    # off `.node`/`.path` instead.
     index: int
     node: str
     kind: Literal["node", "interrupt", "subgraph_enter", "subgraph_exit"]

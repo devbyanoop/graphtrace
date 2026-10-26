@@ -1,0 +1,11 @@
+# Real project config, added 2026-10-26 to support the real live-provider
+# judge verification (tests/test_judge_live.py) and `graphtrace calibrate`
+# against a real model. Framework/target left at their defaults -- nothing
+# in this repo's own test suite calls `run_graph` through the pytest fixture
+# from outside an isolated `pytester` sub-run, so this file's `replay`/
+# `budgets` sections don't need anything beyond their own defaults either.
+judge:
+  model: groq/openai/gpt-oss-120b  # confirmed real and working by hand (see docs/guide/judge-and-calibration.md)
+  rubrics_dir: rubrics/
+  calibration_set: evals/calibration.jsonl
+  min_agreement: 0.5  # loose on purpose -- evals/calibration.jsonl is a small, 4-case demonstration set (see its own header), not the 20-50 cases a real production threshold needs
