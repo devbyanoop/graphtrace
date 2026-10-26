@@ -103,6 +103,7 @@ def calibrate_cmd(
 def report_cmd(
     results_file: Path = typer.Argument(..., help="A results.json written by `pytest --gt-report=...` or report/results.py's save_results()."),
     out: Optional[Path] = typer.Option(None, "--out", help="Defaults to graphtrace.yaml's report.html."),
+    title: str = typer.Option("graphtrace report", "--title", help="Page title/heading for the rendered report."),
     config_path: Path = typer.Option(Path("graphtrace.yaml"), "--config", help="Path to graphtrace.yaml."),
 ) -> None:
     """Render the static HTML report from a saved results.json."""
@@ -110,7 +111,7 @@ def report_cmd(
     out_path = out or Path(config.report.html)
 
     results = load_results(results_file)
-    html = render_report(results)
+    html = render_report(results, title=title)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html, encoding="utf-8")
     typer.echo(f"wrote report: {out_path}")

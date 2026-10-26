@@ -1,8 +1,14 @@
 # Changelog
 
-All notable changes to graphtrace are recorded here, following [Keep a Changelog](https://keepachangelog.com/) conventions. Nothing has been released yet — everything below is under `Unreleased`.
+All notable changes to graphtrace are recorded here, following [Keep a Changelog](https://keepachangelog.com/) conventions.
 
 ## [Unreleased]
+
+Nothing yet — v0.1.0 is the current release; see below.
+
+## [0.1.0] - 2026-10-26
+
+v0.1's full scope: the framework-agnostic `Trajectory` model and 12-function assertion API, the real LangGraph recording layer (including subgraphs), record/replay cassettes, a pinned-model judge contract with calibration, trace-to-test from a production export (Langfuse/OTel/LangSmith), a static HTML report, a real `graphtrace` CLI, and CI — 179 tests pass, full regression. Verified against real upstream sources throughout (a real live Groq model, the real `openinference-semantic-conventions` source, a real wheel build in a genuinely isolated clean venv), not just mocks and hand-built fixtures. Everything that follows, down to the next version header, was built and verified before this release.
 
 ### Added (2026-10-26) -- real-world readiness hardening
 - `tests/test_judge_live.py`: real integration tests against a live Groq model via `litellm` (the live-provider counterpart to `test_judge.py`'s fakes), gated on `GROQ_API_KEY`. `graphtrace.yaml`, `rubrics/refund_reply.yaml`, `evals/calibration.jsonl` (a small, 4-case, hand-authored demonstration set -- not a statistically meaningful calibration) added to support it. 4 new tests.

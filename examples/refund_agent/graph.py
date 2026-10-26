@@ -132,3 +132,13 @@ def build_refund_graph_demo():
     every test in test_demo_agent.py does.
     """
     return build_refund_graph(GenericFakeChatModel(messages=itertools.repeat(AIMessage(content="ok"))))
+
+
+def build_refund_graph_demo_with_retry():
+    """Same as `build_refund_graph_demo()`, but `lookup_order`'s first call
+    fails once before succeeding -- matches `examples/sample_trace/`'s own
+    recorded retry exactly, so that sample's generated test genuinely
+    exercises a real retry on replay, not a cassette entry that happens to
+    go unused.
+    """
+    return build_refund_graph(GenericFakeChatModel(messages=itertools.repeat(AIMessage(content="ok"))), fail_lookup_times=1)

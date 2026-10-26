@@ -199,3 +199,19 @@ def test_report_defaults_output_path_to_config_report_html(tmp_path: Path):
     result = runner.invoke(app, ["report", str(results_path), "--config", str(config_path)])
     assert result.exit_code == 0, result.output
     assert (tmp_path / "custom_report.html").exists()
+
+
+def test_report_accepts_a_custom_title(tmp_path: Path):
+    """Without this, there was no way to reproduce a previously-rendered
+    report byte-for-byte from its own results.json -- the title always fell
+    back to the one hardcoded default, confirmed by hand while building
+    examples/sample_report/ before fixing it here."""
+    results_path = tmp_path / "results.json"
+    save_results([TestResult(test_id="test_a", outcome="passed")], results_path)
+    out_path = tmp_path / "out.html"
+
+    result = runner.invoke(app, ["report", str(results_path), "--out", str(out_path), "--title", "my custom title"])
+    assert result.exit_code == 0, result.output
+    html = out_path.read_text(encoding="utf-8")
+    assert "<title>my custom title</title>" in html
+    assert "<h1>my custom title</h1>" in html

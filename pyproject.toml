@@ -49,3 +49,9 @@ packages = ["src/graphtrace"]
 # build_refund_graph`) without examples/ being an installed package -- it's example
 # code a user reads and copies, not something graphtrace itself ships or depends on.
 pythonpath = ["examples"]
+# Without this, a bare `pytest` from the repo root also collects
+# examples/sample_trace/test_refund_sample.py (a checked-in, already-generated
+# sample, meant to be run explicitly as documentation -- see its own README) --
+# confirmed by hand that it silently joined the main count the moment that
+# sample was added. The project's own regression suite is tests/, full stop.
+testpaths = ["tests"]

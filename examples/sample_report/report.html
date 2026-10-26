@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>graphtrace sample report</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem; color: #1a1a1a; background: #fff; }
+  h1 { margin-bottom: 0.5rem; }
+  .summary { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.5rem; }
+  .summary div { padding: 0.4rem 0.9rem; border-radius: 6px; background: #f1f1f1; font-size: 0.95em; }
+  .passed { color: #146c2e; }
+  .failed { color: #b42318; }
+  .errored { color: #b45309; }
+  .test { border: 1px solid #ddd; border-radius: 8px; margin-bottom: 1rem; padding: 1rem 1.25rem; }
+  .test.failed { border-color: #f3b3ab; background: #fff5f4; }
+  .test.error { border-color: #fcd9a0; background: #fffaf0; }
+  .test h2 { margin: 0 0 0.5rem 0; font-size: 1.05em; }
+  .verdict.pass { color: #146c2e; font-weight: 600; }
+  .verdict.fail { color: #b42318; font-weight: 600; }
+  .step { margin: 0.35rem 0 0.35rem 0.5rem; padding: 0.4rem 0.7rem; border-left: 3px solid #ccc; }
+  .call { margin: 0.25rem 0 0.25rem 1rem; font-size: 0.9em; color: #333; }
+  pre { white-space: pre-wrap; word-break: break-word; background: #f7f7f7; padding: 0.5rem; border-radius: 4px; margin: 0.25rem 0; }
+</style>
+</head>
+<body>
+<h1>graphtrace sample report</h1>
+<div class="summary">
+  <div>3 tests</div>
+  <div class="passed">2 passed</div>
+  <div class="failed">1 failed</div>
+  <div class="errored">0 errored</div>
+  <div>$0.0000 total cost</div>
+  <div>0.03s total latency</div>
+</div>
+
+
+<div class="test passed">
+  <h2>test_refund_happy_path &mdash; <span class="verdict pass">passed</span></h2>
+
+  
+
+  
+  <h3>Judge verdicts</h3>
+  <ul>
+    
+    <li>
+      <span class="verdict pass">refund_reply: pass</span>
+      <ul>
+        
+        <li>confirms_amount: {&#39;pass&#39;: True, &#39;reason&#39;: &#39;The response includes the specific refund amount of $129.00.&#39;}</li>
+        
+        <li>no_promises: {&#39;pass&#39;: True, &#39;reason&#39;: &#39;The response does not mention any delivery or processing timeline.&#39;}</li>
+        
+      </ul>
+    </li>
+    
+  </ul>
+  
+
+  
+  <p>
+    cost: $0.0000
+    &middot; latency: 0.01s
+    &middot; tokens: 0
+    
+  </p>
+
+  <h3>Trajectory</h3>
+  
+  <div class="step">
+    <strong>[0] router</strong> (node, 0.01s)
+    
+    <div class="call">
+      llm &middot; GenericFakeChatModel &middot; 0+0 tokens &middot; $0.0000
+      <pre>{&#39;content&#39;: &#39;Yes, $129.00 has been refunded to your original payment method.&#39;, &#39;tool_calls&#39;: []}</pre>
+    </div>
+    
+    
+  </div>
+  
+  <div class="step">
+    <strong>[1] lookup_order</strong> (node, 0.00s)
+    
+    
+    <div class="call">
+      tool &middot; get_order({&#39;order_id&#39;: &#39;7890&#39;})
+      
+      &rarr; <pre>{&#39;status&#39;: &#39;delivered&#39;, &#39;amount&#39;: 49.0}</pre>
+      
+    </div>
+    
+  </div>
+  
+  <div class="step">
+    <strong>[3] human_approval</strong> (node, 0.00s)
+    
+    
+  </div>
+  
+  <div class="step">
+    <strong>[4] refund</strong> (node, 0.00s)
+    
+    
+  </div>
+  
+
+  
+  
+</div>
+
+<div class="test passed">
+  <h2>test_refund_rejected_by_human &mdash; <span class="verdict pass">passed</span></h2>
+
+  
+
+  
+
+  
+  <p>
+    cost: $0.0000
+    &middot; latency: 0.01s
+    &middot; tokens: 0
+    
+  </p>
+
+  <h3>Trajectory</h3>
+  
+  <div class="step">
+    <strong>[0] router</strong> (node, 0.00s)
+    
+    <div class="call">
+      llm &middot; GenericFakeChatModel &middot; 0+0 tokens &middot; $0.0000
+      <pre>{&#39;content&#39;: &#39;Yes, $129.00 has been refunded to your original payment method.&#39;, &#39;tool_calls&#39;: []}</pre>
+    </div>
+    
+    
+  </div>
+  
+  <div class="step">
+    <strong>[1] lookup_order</strong> (node, 0.00s)
+    
+    
+    <div class="call">
+      tool &middot; get_order({&#39;order_id&#39;: &#39;4411&#39;})
+      
+      &rarr; <pre>{&#39;status&#39;: &#39;delivered&#39;, &#39;amount&#39;: 49.0}</pre>
+      
+    </div>
+    
+  </div>
+  
+  <div class="step">
+    <strong>[3] human_approval</strong> (node, 0.00s)
+    
+    
+  </div>
+  
+  <div class="step">
+    <strong>[4] give_up</strong> (node, 0.00s)
+    
+    
+  </div>
+  
+
+  
+  
+</div>
+
+<div class="test failed">
+  <h2>test_refund_budget_regression &mdash; <span class="verdict fail">failed</span></h2>
+
+  
+  <pre class="error">expected final_state[&#39;refunded&#39;] == False, got True</pre>
+  
+
+  
+
+  
+  <p>
+    cost: $0.0000
+    &middot; latency: 0.01s
+    &middot; tokens: 0
+    
+  </p>
+
+  <h3>Trajectory</h3>
+  
+  <div class="step">
+    <strong>[0] router</strong> (node, 0.00s)
+    
+    <div class="call">
+      llm &middot; GenericFakeChatModel &middot; 0+0 tokens &middot; $0.0000
+      <pre>{&#39;content&#39;: &#39;Yes, $129.00 has been refunded to your original payment method.&#39;, &#39;tool_calls&#39;: []}</pre>
+    </div>
+    
+    
+  </div>
+  
+  <div class="step">
+    <strong>[1] lookup_order</strong> (node, 0.00s)
+    
+    
+    <div class="call">
+      tool &middot; get_order({&#39;order_id&#39;: &#39;5500&#39;})
+      
+      &rarr; <pre>{&#39;status&#39;: &#39;delivered&#39;, &#39;amount&#39;: 49.0}</pre>
+      
+    </div>
+    
+  </div>
+  
+  <div class="step">
+    <strong>[3] human_approval</strong> (node, 0.00s)
+    
+    
+  </div>
+  
+  <div class="step">
+    <strong>[4] refund</strong> (node, 0.00s)
+    
+    
+  </div>
+  
+
+  
+  
+</div>
+
+</body>
+</html>

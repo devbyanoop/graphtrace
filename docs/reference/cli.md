@@ -28,10 +28,10 @@ Scores the judge against `graphtrace.yaml`'s `judge.calibration_set`, printing p
 ## `graphtrace report`
 
 ```bash
-graphtrace report results.json [--out PATH] [--config graphtrace.yaml]
+graphtrace report results.json [--out PATH] [--title "..."] [--config graphtrace.yaml]
 ```
 
-Renders the static HTML report from an existing `results.json` (written by `pytest --gt-report=...`, or by `report/results.py`'s `save_results()` directly). `--out` defaults to `graphtrace.yaml`'s `report.html`. See [Report & CI](../guide/report-and-ci.md).
+Renders the static HTML report from an existing `results.json` (written by `pytest --gt-report=...`, or by `report/results.py`'s `save_results()` directly). `--out` defaults to `graphtrace.yaml`'s `report.html`; `--title` defaults to `"graphtrace report"` (set it to reproduce a previous render exactly — see `examples/sample_report/`). See [Report & CI](../guide/report-and-ci.md).
 
 ## pytest options
 

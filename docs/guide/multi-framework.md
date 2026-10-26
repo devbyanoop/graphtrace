@@ -9,7 +9,7 @@ v0.1's goals are scoped to LangGraph. Non-LangGraph framework support was origin
 
 ## What stays unchanged (the part of "framework-agnostic" that was already true)
 
-`core/` — the `Trajectory`/`Step` data model, all 11 `assert_*` functions, budgets, errors, matchers — needs **zero changes** for CrewAI or AutoGen support. Every field is already generic enough (plain `dict[str, Any]` state, a plain `tuple[str, ...]` namespace) to represent a different framework's execution. This is also the real test of the design: if adding a framework ever turns out to require a `core/` change, that's a bug in this claim, not a reason to quietly patch around it.
+`core/` — the `Trajectory`/`Step` data model, all 12 `assert_*` functions, budgets, errors, matchers — needs **zero changes** for CrewAI or AutoGen support. Every field is already generic enough (plain `dict[str, Any]` state, a plain `tuple[str, ...]` namespace) to represent a different framework's execution. This is also the real test of the design: if adding a framework ever turns out to require a `core/` change, that's a bug in this claim, not a reason to quietly patch around it.
 
 ## What v0.1 changes proactively, ahead of needing it
 

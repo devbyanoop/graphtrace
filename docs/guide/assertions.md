@@ -6,7 +6,8 @@ All 12 functions below are implemented and tested — `src/graphtrace/core/asser
 from graphtrace import (
     assert_path, assert_visited, assert_not_visited, assert_visits,
     assert_state, assert_state_at, assert_tool_called, assert_tool_not_called,
-    assert_retries, assert_interrupted_at, assert_budget, any_str,
+    assert_tool_calls_match, assert_retries, assert_interrupted_at,
+    assert_budget, any_str,
 )
 ```
 

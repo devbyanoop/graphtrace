@@ -1,0 +1,353 @@
+[
+  {
+    "test_id": "test_refund_happy_path",
+    "outcome": "passed",
+    "trajectory": {
+      "path": [
+        "router",
+        "lookup_order",
+        "human_approval",
+        "refund"
+      ],
+      "interrupted": false,
+      "mode": "record",
+      "final_state": {
+        "order_id": "7890",
+        "intent": "refund",
+        "order": {
+          "status": "delivered",
+          "amount": 49.0
+        },
+        "approved": true,
+        "refunded": true,
+        "lookup_attempts": 1
+      },
+      "final_message": null,
+      "cost_usd": 0.0,
+      "latency_s": 0.01142869982868433,
+      "tokens_total": 0,
+      "steps": [
+        {
+          "index": 0,
+          "node": "router",
+          "kind": "node",
+          "namespace": [],
+          "latency_s": 0.006643899949267507,
+          "state_diff": {
+            "intent": "refund"
+          },
+          "llm_calls": [
+            {
+              "node": "router",
+              "model": "GenericFakeChatModel",
+              "prompt_tokens": 0,
+              "completion_tokens": 0,
+              "latency_s": 0.004789499915204942,
+              "cost_usd": 0.0,
+              "output": {
+                "content": "Yes, $129.00 has been refunded to your original payment method.",
+                "tool_calls": []
+              }
+            }
+          ],
+          "tool_calls": []
+        },
+        {
+          "index": 1,
+          "node": "lookup_order",
+          "kind": "node",
+          "namespace": [],
+          "latency_s": 0.0026450000004842877,
+          "state_diff": {
+            "order": {
+              "status": "delivered",
+              "amount": 49.0
+            },
+            "lookup_attempts": 1
+          },
+          "llm_calls": [],
+          "tool_calls": [
+            {
+              "node": "lookup_order",
+              "name": "get_order",
+              "args": {
+                "order_id": "7890"
+              },
+              "result": {
+                "status": "delivered",
+                "amount": 49.0
+              },
+              "error": null,
+              "latency_s": 0.0013421999756246805
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "node": "human_approval",
+          "kind": "node",
+          "namespace": [],
+          "latency_s": 0.0012753999326378107,
+          "state_diff": {
+            "approved": true
+          },
+          "llm_calls": [],
+          "tool_calls": []
+        },
+        {
+          "index": 4,
+          "node": "refund",
+          "kind": "node",
+          "namespace": [],
+          "latency_s": 0.0008643999462947249,
+          "state_diff": {
+            "refunded": true
+          },
+          "llm_calls": [],
+          "tool_calls": []
+        }
+      ]
+    },
+    "error_message": null,
+    "judge_verdicts": [
+      {
+        "rubric_id": "refund_reply",
+        "criteria": {
+          "confirms_amount": {
+            "pass": true,
+            "reason": "The response includes the specific refund amount of $129.00."
+          },
+          "no_promises": {
+            "pass": true,
+            "reason": "The response does not mention any delivery or processing timeline."
+          }
+        },
+        "passed": true
+      }
+    ]
+  },
+  {
+    "test_id": "test_refund_rejected_by_human",
+    "outcome": "passed",
+    "trajectory": {
+      "path": [
+        "router",
+        "lookup_order",
+        "human_approval",
+        "give_up"
+      ],
+      "interrupted": false,
+      "mode": "record",
+      "final_state": {
+        "order_id": "4411",
+        "intent": "refund",
+        "order": {
+          "status": "delivered",
+          "amount": 49.0
+        },
+        "approved": false,
+        "refunded": false,
+        "lookup_attempts": 1
+      },
+      "final_message": null,
+      "cost_usd": 0.0,
+      "latency_s": 0.00862890004646033,
+      "tokens_total": 0,
+      "steps": [
+        {
+          "index": 0,
+          "node": "router",
+          "kind": "node",
+          "namespace": [],
+          "latency_s": 0.0034316000528633595,
+          "state_diff": {
+            "intent": "refund"
+          },
+          "llm_calls": [
+            {
+              "node": "router",
+              "model": "GenericFakeChatModel",
+              "prompt_tokens": 0,
+              "completion_tokens": 0,
+              "latency_s": 0.002306499984115362,
+              "cost_usd": 0.0,
+              "output": {
+                "content": "Yes, $129.00 has been refunded to your original payment method.",
+                "tool_calls": []
+              }
+            }
+          ],
+          "tool_calls": []
+        },
+        {
+          "index": 1,
+          "node": "lookup_order",
+          "kind": "node",
+          "namespace": [],
+          "latency_s": 0.002354700001887977,
+          "state_diff": {
+            "order": {
+              "status": "delivered",
+              "amount": 49.0
+            },
+            "lookup_attempts": 1
+          },
+          "llm_calls": [],
+          "tool_calls": [
+            {
+              "node": "lookup_order",
+              "name": "get_order",
+              "args": {
+                "order_id": "4411"
+              },
+              "result": {
+                "status": "delivered",
+                "amount": 49.0
+              },
+              "error": null,
+              "latency_s": 0.00120900000911206
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "node": "human_approval",
+          "kind": "node",
+          "namespace": [],
+          "latency_s": 0.0021102000027894974,
+          "state_diff": {
+            "approved": false
+          },
+          "llm_calls": [],
+          "tool_calls": []
+        },
+        {
+          "index": 4,
+          "node": "give_up",
+          "kind": "node",
+          "namespace": [],
+          "latency_s": 0.0007323999889194965,
+          "state_diff": {
+            "refunded": false
+          },
+          "llm_calls": [],
+          "tool_calls": []
+        }
+      ]
+    },
+    "error_message": null,
+    "judge_verdicts": []
+  },
+  {
+    "test_id": "test_refund_budget_regression",
+    "outcome": "failed",
+    "trajectory": {
+      "path": [
+        "router",
+        "lookup_order",
+        "human_approval",
+        "refund"
+      ],
+      "interrupted": false,
+      "mode": "record",
+      "final_state": {
+        "order_id": "5500",
+        "intent": "refund",
+        "order": {
+          "status": "delivered",
+          "amount": 49.0
+        },
+        "approved": true,
+        "refunded": true,
+        "lookup_attempts": 1
+      },
+      "final_message": null,
+      "cost_usd": 0.0,
+      "latency_s": 0.009811999974772334,
+      "tokens_total": 0,
+      "steps": [
+        {
+          "index": 0,
+          "node": "router",
+          "kind": "node",
+          "namespace": [],
+          "latency_s": 0.0033535000402480364,
+          "state_diff": {
+            "intent": "refund"
+          },
+          "llm_calls": [
+            {
+              "node": "router",
+              "model": "GenericFakeChatModel",
+              "prompt_tokens": 0,
+              "completion_tokens": 0,
+              "latency_s": 0.002314800047315657,
+              "cost_usd": 0.0,
+              "output": {
+                "content": "Yes, $129.00 has been refunded to your original payment method.",
+                "tool_calls": []
+              }
+            }
+          ],
+          "tool_calls": []
+        },
+        {
+          "index": 1,
+          "node": "lookup_order",
+          "kind": "node",
+          "namespace": [],
+          "latency_s": 0.0036143000470474362,
+          "state_diff": {
+            "order": {
+              "status": "delivered",
+              "amount": 49.0
+            },
+            "lookup_attempts": 1
+          },
+          "llm_calls": [],
+          "tool_calls": [
+            {
+              "node": "lookup_order",
+              "name": "get_order",
+              "args": {
+                "order_id": "5500"
+              },
+              "result": {
+                "status": "delivered",
+                "amount": 49.0
+              },
+              "error": null,
+              "latency_s": 0.0019478000467643142
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "node": "human_approval",
+          "kind": "node",
+          "namespace": [],
+          "latency_s": 0.00217179988976568,
+          "state_diff": {
+            "approved": true
+          },
+          "llm_calls": [],
+          "tool_calls": []
+        },
+        {
+          "index": 4,
+          "node": "refund",
+          "kind": "node",
+          "namespace": [],
+          "latency_s": 0.0006723999977111816,
+          "state_diff": {
+            "refunded": true
+          },
+          "llm_calls": [],
+          "tool_calls": []
+        }
+      ]
+    },
+    "error_message": "expected final_state['refunded'] == False, got True",
+    "judge_verdicts": []
+  }
+]

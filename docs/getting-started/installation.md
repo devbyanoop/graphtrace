@@ -1,7 +1,7 @@
 # Installation
 
 !!! warning "Not yet on PyPI"
-    graphtrace hasn't published a release yet. Once it does, installation will be `pip install graphtrace`. This page will be updated the day that's true — until then, the section below is the real, verified way to run it today.
+    graphtrace hasn't published a release yet. Once it does, installation will be `pip install graphtrace`. This page will be updated the day that's true — until then, the section below is the real, verified way to run it today (including from a real built wheel, not just an editable install — see [Roadmap & status](../project/roadmap.md)'s packaging note).
 
 ## Install from source (current, verified)
 
@@ -23,7 +23,9 @@ pip install -e ".[dev]"
 
 - `python -m venv .venv` creates an isolated Python environment just for this project.
 - `-e` installs in **editable** mode — changes under `src/graphtrace/` take effect immediately, without reinstalling.
-- `[dev]` currently only pulls in `pytest`. There's no `langgraph`, `litellm`, or `pydantic` dependency yet because nothing in the code imports them yet — see [Roadmap & status](../project/roadmap.md) for when each one shows up.
+- `[dev]` pulls in `pytest` and `python-dotenv`. `pyproject.toml`'s own core `dependencies` (not an extra) bring in `langgraph`, `langchain-core`, `ruamel.yaml`, `pydantic`, `litellm`, `scikit-learn`, `jinja2`, and `typer` — everything the full feature set below needs, installed by default.
+
+This also installs a `graphtrace` console command and registers graphtrace as a pytest plugin automatically (no `-p` flag needed) — confirmed working the same way from a real built wheel in a clean, isolated virtualenv, not just this editable-install dev loop.
 
 Verify the install:
 
@@ -31,17 +33,21 @@ Verify the install:
 pytest
 ```
 
-103 tests should pass — the core data model and assertion API (37, no LangGraph involved, see [Core concepts](../guide/trajectory-model.md)), 24 against real compiled LangGraph runs (the recorder, interceptors, and the `examples/refund_agent` demo agent), and 42 more against record/replay cassettes, the `--gt-mode` pytest flag, and `graphtrace.yaml` config loading (see [Recording & replay](../guide/recording-and-replay.md) and [Configuration](../guide/configuration.md)). All offline, in about two seconds.
+**179 tests should pass**, full regression, in well under a minute. Four of those (`tests/test_judge_live.py`) make a real call to a live Groq model and are skipped cleanly if `GROQ_API_KEY` isn't set (see `.env.example`) — everything else runs offline against fake chat models and hand-built fixtures.
 
-## Planned extras
+```bash
+graphtrace --help
+```
+
+Should show three real commands: `from-trace`, `calibrate`, `report` — see the [CLI reference](../reference/cli.md).
+
+## Extras
 
 | Extra | Pulls in | Status |
 | --- | --- | --- |
-| `dev` | `pytest` | ✅ Available |
+| `dev` | `pytest`, `python-dotenv` | ✅ Available |
 | `docs` | `mkdocs`, `mkdocs-material` | ✅ Available |
-| (none yet) | `langgraph`, `langchain-core` | Planned — the `runtime/` layer (recorder, interceptors) |
-| (none yet) | `ruamel.yaml` | Planned — cassette read/write |
-| (none yet) | `litellm` | Planned — judge contract |
-| (none yet) | `typer` | Planned — CLI |
 
-See [Roadmap & status](../project/roadmap.md) for the current build state.
+Everything else (`langgraph`, `litellm`, `pydantic`, `ruamel.yaml`, `scikit-learn`, `jinja2`, `typer`) is a core dependency, installed by default — not behind an extra.
+
+See [Roadmap & status](../project/roadmap.md) for the full build history.

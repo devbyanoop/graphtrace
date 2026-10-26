@@ -13,7 +13,7 @@ replay:
       replace: '<ts>'
   redact: [api_key, email, phone]
 judge:
-  model: <pinned model id>
+  model: groq/openai/gpt-oss-120b     # a real, working litellm model string -- this project's own graphtrace.yaml uses exactly this
   rubrics_dir: rubrics/
   calibration_set: evals/calibration.jsonl
   min_agreement: 0.8
@@ -30,7 +30,8 @@ report:
 - **`replay.mode`**: must be one of `record`/`replay`/`record_missing`/`live`.
 - **`replay.cassettes`**: the `run_graph` pytest fixture uses this as the directory a test's auto-generated cassette path lives under (`<cassettes>/<test node id>.yaml`).
 - **`budgets.default`**: the `run_graph` fixture applies this automatically after every call, via `core/budgets.py`'s `Budgets.check()` — a test that never calls `assert_budget(...)` itself still fails if the configured default is exceeded.
-- **`judge`**: validated (requires `model` if the section is present at all) but not consulted by anything yet — Week 3.
+- **`judge`**: requires `model` if the section is present at all; consulted directly by `graphtrace calibrate` (`judge.model`/`judge.rubrics_dir`/`judge.calibration_set`/`judge.min_agreement`) — see [Judge & calibration](judge-and-calibration.md).
+- **`report`**: `report.html` is the default output path for `graphtrace report` when `--out` isn't given — see [Report & CI](report-and-ci.md).
 
 ## Still planned
 
@@ -38,4 +39,3 @@ report:
     - `replay.normalize`'s custom rules aren't wired through to `core/normalize.py` yet (the built-in timestamp/UUID rules are, and are used for every cassette match).
     - `replay.redact` isn't enforced — see [Recording & replay](recording-and-replay.md) for the current state of this gap.
     - `pricing_overrides` isn't read by `frameworks/pricing.py` yet.
-    - `judge` and `report` sections are modeled (so a project can write them ahead of time without a schema change later) but not consulted — both Week 3.

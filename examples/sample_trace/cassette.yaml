@@ -1,0 +1,38 @@
+version: 1
+graphtrace: 0.1.0
+recorded_at: '2026-10-26T14:35:05.910612+00:00'
+entries:
+- key: router/llm/any/0
+  kind: llm
+  node: router
+  request:
+    messages:
+    - - human
+      - What does the customer want for order 7890?
+  latency_s: 0.51
+  response:
+    content: ok
+    tool_calls: []
+    usage:
+      input_tokens: 0
+      output_tokens: 0
+  model: gpt-4o-mini
+- key: lookup_order/tool/any/0
+  kind: tool
+  node: lookup_order
+  request:
+    order_id: '7890'
+  latency_s: 0.25
+  error: order service unavailable (attempt 1)
+  response:
+  name: lookup_order
+- key: lookup_order/tool/any/1
+  kind: tool
+  node: lookup_order
+  request:
+    order_id: '7890'
+  latency_s: 0.25
+  response:
+    status: delivered
+    amount: 129.0
+  name: lookup_order

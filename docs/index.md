@@ -2,12 +2,12 @@
 
 **Regression testing for LangGraph agents, built as a pytest plugin.**
 
-!!! note "Status: early development"
-    graphtrace is being built in the open, feature by feature. This guide grows alongside the code — every page below is either real, verified documentation for something that works today, or a clearly marked placeholder for something planned. See [Roadmap & status](project/roadmap.md) for exactly what's implemented right now.
+!!! note "Status: v0.1 complete, heading toward release"
+    Everything described on this page is real and tested today — 179 tests pass, full regression. See [Roadmap & status](project/roadmap.md) for the exact build history, including every real bug found and fixed along the way.
 
 ## The problem
 
-Most LangGraph agents are tested the way nothing else in a codebase is: by rereading the final message, or not at all. A graph with branches, retries, and tool calls can look fine on a lucky run while silently changing *how* it got there — a different node path, a retry that's now happening every time, a tool call that quietly stopped firing. A test that only checks the final answer text can't catch any of that, because the final answer can still look right.
+Most LangGraph agents are tested the way nothing else in a codebase is: by rereading the final message, or not at all. A graph with branches, retries, and tool calls can look fine on a lucky run while silently changing *how* it got there — a different node path, a retry that's now happening every time, a tool call that quietly stopped firing, a human-approval gate the agent learned to route around. A test that only checks the final answer text can't catch any of that, because the final answer can still look right while the path that produced it is wrong, expensive, or unsafe.
 
 ## What graphtrace does
 
@@ -24,10 +24,12 @@ flowchart LR
     A[pytest test] -->|run_graph| B[Your compiled LangGraph]
     B --> C[Trajectory: path, state, tool/LLM calls]
     C --> D[assert_* functions]
-    B -.->|record / replay, planned| E[(Cassettes on disk)]
+    B -.->|record / replay| E[(Cassettes on disk)]
+    C --> F[graphtrace calibrate: judge verdicts]
+    C --> G[graphtrace report: HTML + CI]
 ```
 
-Once recording and replay are built (see the roadmap), the LLM and tool boxes are never reached in CI — responses come from cassettes, so a test suite runs offline and deterministically.
+In `replay` mode (the intended default for CI), the LLM and tool boxes are never reached — responses come from cassettes, so a test suite runs offline and deterministically. A production trace export (Langfuse/OTel/LangSmith) can also become a cassette + generated test directly, via `graphtrace from-trace`, without a real LangGraph run at all.
 
 ## Who this is for
 
@@ -37,12 +39,12 @@ Once recording and replay are built (see the roadmap), the LLM and tool boxes ar
 
 ## Design principles that shape every feature
 
-- **Framework-agnostic core.** Everything downstream of recording — assertions, budgets, the eventual HTML report — works on a plain `Trajectory` object with no LangGraph import anywhere near it. LangGraph-specific code lives in exactly one layer; another agent framework could plug into the same core later without touching the rest.
+- **Framework-agnostic core.** Everything downstream of recording — assertions, budgets, the HTML report — works on a plain `Trajectory` object with no LangGraph import anywhere near it. LangGraph-specific code lives in exactly one layer (`frameworks/langgraph/`); CrewAI/AutoGen (v0.4) plug into the same core without touching the rest.
 - **Offline by default, once cassettes exist.** A CI run shouldn't have to call a real model or a real tool to pass.
-- **No invented numbers.** Cost and token budgets are checked against real recorded usage, never an estimate.
+- **No invented numbers.** Cost, token, and judge-agreement figures come from real recorded usage or a real live call, never an estimate.
 
 ## Next steps
 
-- New to graphtrace? Start with [Installation](getting-started/installation.md).
-- Want to see what's actually built today, not just planned? Check [Roadmap & status](project/roadmap.md).
-- Curious how the assertion API works right now? See [Assertions](guide/assertions.md) — the one guide page that's fully real and tested today.
+- New to graphtrace? Start with [Installation](getting-started/installation.md) and the [Quickstart](getting-started/quickstart.md).
+- Want to see exactly what's built, including every real bug found along the way? Check [Roadmap & status](project/roadmap.md).
+- Pointing this at a judge-graded or production-trace workflow? See [Judge & calibration](guide/judge-and-calibration.md) and [Trace-to-test](guide/trace-to-test.md).

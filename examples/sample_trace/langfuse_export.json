@@ -1,0 +1,32 @@
+{
+  "id": "trace-sample-refund-9f3a",
+  "input": {"order_id": "7890"},
+  "observations": [
+    {
+      "type": "GENERATION",
+      "name": "router",
+      "input": {"messages": [["human", "What does the customer want for order 7890?"]]},
+      "output": {"content": "ok"},
+      "model": "gpt-4o-mini",
+      "startTime": "2026-10-26T09:14:02.100000",
+      "endTime": "2026-10-26T09:14:02.610000"
+    },
+    {
+      "type": "SPAN",
+      "name": "lookup_order",
+      "input": {"order_id": "7890"},
+      "level": "ERROR",
+      "statusMessage": "order service unavailable (attempt 1)",
+      "startTime": "2026-10-26T09:14:02.650000",
+      "endTime": "2026-10-26T09:14:02.900000"
+    },
+    {
+      "type": "SPAN",
+      "name": "lookup_order",
+      "input": {"order_id": "7890"},
+      "output": {"status": "delivered", "amount": 129.0},
+      "startTime": "2026-10-26T09:14:03.400000",
+      "endTime": "2026-10-26T09:14:03.650000"
+    }
+  ]
+}
