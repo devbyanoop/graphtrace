@@ -152,22 +152,37 @@ class Recorder:
         # parent's own namespace plus exactly one new segment, "{parent_node}:
         # {parent_task_id}" -- confirmed by hand. Checked on every task event,
         # not only the first, since a subgraph can contain more than one node.
+        #
+        # The parent's own *pending* step -- already correctly indexed to when
+        # its wrapping task actually started -- becomes the enter marker,
+        # emitted right away; a brand-new step, indexed *now* (always later,
+        # since detection can only happen after the parent started), takes its
+        # place in `_pending` to eventually become the exit marker. Found and
+        # fixed a real bug from the original version of this logic (confirmed
+        # against a real subgraph-using external app, langgraph-swarm-py):
+        # creating the *enter* step fresh here instead gave it a higher index
+        # than the exit step (which kept the parent's original, earlier one)
+        # -- exit showing a lower number than its own enter, backwards from
+        # what actually happened.
         if namespace:
             parent_ns, marker = namespace[:-1], namespace[-1]
-            for parent_task_id, (parent_step, _start) in self._pending[parent_ns].items():
+            for parent_task_id, (parent_step, parent_start) in self._pending[parent_ns].items():
                 if marker == f"{parent_step.node}:{parent_task_id}" and (parent_ns, parent_task_id) not in self._subgraph_task_ids:
                     self._subgraph_task_ids.add((parent_ns, parent_task_id))
-                    enter_step = Step(
+                    parent_step.kind = "subgraph_enter"
+                    parent_step.state_after = dict(parent_step.state_before)
+                    self.steps.append(parent_step)
+                    exit_step = Step(
                         index=self._step_index,
                         node=parent_step.node,
-                        kind="subgraph_enter",
+                        kind="node",  # becomes "subgraph_exit" in _on_task_result, same as any subgraph-wrapping task
                         state_before=dict(parent_step.state_before),
-                        state_after=dict(parent_step.state_before),
+                        state_after={},
                         state_diff={},
                         namespace=parent_ns,
                     )
                     self._step_index += 1
-                    self.steps.append(enter_step)
+                    self._pending[parent_ns][parent_task_id] = (exit_step, parent_start)
                     break
 
         if task_id in self._committed_by_id[namespace]:
@@ -206,6 +221,35 @@ class Recorder:
         # checkpoint that settles this step arrives (see _on_checkpoint), or until
         # flush() decides no such checkpoint is coming.
         self._awaiting_state_after[namespace].append((task_id, step))
+
+        # A real gap found and fixed testing against a real external app
+        # (langchain-ai/langgraph-swarm-py's handoff tools): a tool whose real
+        # call returns `Command(graph=Command.PARENT, ...)` (LangGraph's own
+        # mechanism for a tool to redirect control up to the parent graph)
+        # never gets its *own* task_result/checkpoint at all -- confirmed by
+        # hand against the real debug-event stream, its completion is folded
+        # directly into the *parent's* task_result instead, with no settling
+        # point for the child in between. Without this, that child's step
+        # would simply never commit (unlike the flush() case this project
+        # already handles, there is no later event that will ever resolve
+        # it) -- silently dropping a real, already-buffered tool call from
+        # the trajectory, even though the call itself was captured correctly
+        # by the interceptor. Absorbed here: any task still pending directly
+        # under *this* task's own namespace, the instant this one resolves,
+        # since the parent resolving is the only signal that will ever come.
+        # state_after is conservatively left equal to state_before -- the
+        # real state change already landed in the *parent's* own result, and
+        # there's no cleanly attributable "state right after just the child"
+        # to show instead of guessing one.
+        child_ns = namespace + (f"{step.node}:{task_id}",)
+        if child_ns in self._pending:
+            for child_task_id, (child_step, child_start) in self._pending[child_ns].items():
+                child_step.latency_s = time.perf_counter() - child_start
+                child_step.llm_calls, child_step.tool_calls = buffer.pop(child_task_id)
+                child_step.state_after = dict(child_step.state_before)
+                self.steps.append(child_step)
+                self._committed_by_id[child_ns][child_task_id] = child_step
+            del self._pending[child_ns]
 
     def _on_checkpoint(self, namespace: _Namespace, payload: dict[str, Any]) -> None:
         values = payload.get("values") or {}

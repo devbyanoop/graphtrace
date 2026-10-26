@@ -29,6 +29,13 @@ dependencies = [
 dev = [
     "pytest>=8,<9",
     "python-dotenv>=1.0,<2",
+    # Not graphtrace's own dependency -- a real, pinned external app
+    # (langchain-ai's own official multi-agent library) kept as a permanent
+    # compatibility test, gated with pytest.importorskip. Testing against
+    # its real API (not a hand-approximated stand-in) is what found three
+    # real bugs no synthetic demo agent ever would have -- see
+    # frameworks/langgraph/{interceptors,recorder}.py's own docstrings.
+    "langgraph-swarm>=0.1,<1",
 ]
 docs = [
     "mkdocs>=1.6",

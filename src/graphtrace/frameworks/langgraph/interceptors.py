@@ -44,6 +44,43 @@ Record/replay (Week 2): each patched method wraps its real call in
 YAML-safe shape first -- `resolve_call` itself never sees an `AIMessage` or
 `ToolMessage` object, only dicts/strings/numbers, which is what keeps it
 framework-agnostic (see that module's own docstring).
+
+A fourth real correction (2026-10-26, found testing against a real external
+app -- `langchain-ai/langgraph-swarm-py`'s own `create_agent`): the
+`config["metadata"]` lookup above assumed every node explicitly threads its
+`config` argument into whatever call it makes, the way a hand-written node
+(this project's own `examples/refund_agent`) does. LangChain 1.x's newer
+`langchain.agents.create_agent()` doesn't -- confirmed by hand that its model
+call reaches `BaseChatModel.invoke()` with `config=None` every time, relying
+instead on `langchain_core.runnables.config`'s *ambient*, contextvar-based
+config propagation (`var_child_runnable_config`), which genuinely does still
+carry the real `langgraph_node`/`langgraph_checkpoint_ns` metadata -- just not
+through the explicit argument this module originally read. Fixed by resolving
+metadata through `ensure_config(config)` (the same public function LangChain's
+own runnables use for exactly this "explicit-or-ambient" fallback) instead of
+`(config or {})` directly, at every site below. `config` passed to the real
+underlying call is left completely untouched either way -- only the metadata
+*read* for attribution purposes changes, never what a real call actually sees.
+
+A fifth real correction (2026-10-26, same external-app testing session): a
+tool call's `args` -- and, separately, its *result* -- are not guaranteed to
+already be YAML-safe the way an LLM call's `str(input)` request is.
+`langgraph-swarm-py`'s own handoff tools confirmed two real, not contrived,
+cases: a tool invoked with LangGraph's "inject full graph state as an arg"
+pattern receives `args` containing raw `BaseMessage` objects nested inside a
+plain dict, and a handoff tool's real *result* is a `Command` object (whose
+own `update` field, in turn, nests more raw messages) -- not a plain
+dict/str/`ToolMessage`, the only shapes this module's serialization
+previously handled. `_yaml_safe()`/`_restore_value()` below extend the
+existing `ToolMessage` round-trip pattern to `BaseMessage` generally (human/
+ai/tool/system) and to `Command`, recursively, so record mode doesn't crash
+trying to write one to a cassette, and replay mode hands back a *real*
+message/`Command` object afterward -- not a plain dict a real node's own
+`isinstance(result, Command)` check would then silently fail. Anything still
+unrecognized falls back to `str()` for the write path; there's nothing
+sensible to reconstruct from that on replay, so it's left as the plain
+string rather than guessed at -- an honest, narrower limitation than crashing
+or silently returning the wrong type.
 """
 
 from __future__ import annotations
@@ -57,13 +94,72 @@ from contextlib import contextmanager
 from typing import Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.runnables.config import ensure_config
 from langchain_core.tools import BaseTool
+from langgraph.types import Command
 
 from graphtrace.core.trajectory import LLMCall, ToolCall
 from graphtrace.frameworks.pricing import cost_for_call
 from graphtrace.replay.context import ReplayContext
 from graphtrace.replay.engine import resolve_call
+
+_MESSAGE_CLASSES_BY_TYPE: dict[str, type[BaseMessage]] = {"human": HumanMessage, "ai": AIMessage, "tool": ToolMessage, "system": SystemMessage}
+
+
+def _yaml_safe(value: Any) -> Any:
+    """Recursively convert a real tool call's args or result into something
+    `ruamel.yaml` can actually write -- see this module's own docstring for
+    the real cases (nested `BaseMessage`s, a `Command`) that made this
+    necessary. Dict/list recurse; a message or `Command` gets a `_type`-
+    tagged dict `_restore_value` below can reverse; anything else already
+    YAML-safe passes through; anything still unrecognized falls back to
+    `str()` -- a readable cassette entry, never a crash, and never a value
+    `_restore_value` will try (and fail) to reconstruct as something it isn't.
+    """
+    if isinstance(value, BaseMessage):
+        data: dict[str, Any] = {"_type": "Message", "type": value.type, "content": value.content}
+        if value.name:
+            data["name"] = value.name
+        if isinstance(value, AIMessage) and value.tool_calls:
+            data["tool_calls"] = _yaml_safe(list(value.tool_calls))
+        if isinstance(value, ToolMessage):
+            data["tool_call_id"] = value.tool_call_id
+        return data
+    if isinstance(value, Command):
+        return {"_type": "Command", "graph": value.graph, "goto": value.goto, "update": _yaml_safe(value.update), "resume": _yaml_safe(value.resume)}
+    if isinstance(value, dict):
+        return {k: _yaml_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_yaml_safe(v) for v in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+def _restore_value(value: Any) -> Any:
+    """The inverse of `_yaml_safe` -- used on a replay hit, so a node that
+    checks `isinstance(result, Command)` (LangGraph's own real handoff
+    pattern) still sees a real one, not the plain dict a naive replay would
+    hand back instead."""
+    if isinstance(value, dict):
+        tag = value.get("_type")
+        if tag == "Message":
+            cls = _MESSAGE_CLASSES_BY_TYPE.get(value.get("type"), AIMessage)
+            kwargs: dict[str, Any] = {"content": value.get("content", "")}
+            if "name" in value:
+                kwargs["name"] = value["name"]
+            if cls is AIMessage and "tool_calls" in value:
+                kwargs["tool_calls"] = _restore_value(value["tool_calls"])
+            if cls is ToolMessage:
+                kwargs["tool_call_id"] = value.get("tool_call_id", "")
+            return cls(**kwargs)
+        if tag == "Command":
+            return Command(graph=value.get("graph"), goto=value.get("goto"), update=_restore_value(value.get("update")), resume=_restore_value(value.get("resume")))
+        return {k: _restore_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_restore_value(v) for v in value]
+    return value
 
 
 def _task_id_from_checkpoint_ns(checkpoint_ns: str | None) -> str | None:
@@ -117,16 +213,24 @@ def _serialize_tool_result(result: Any) -> Any:
     """Most tool results are already YAML-safe (a plain dict/str/number) --
     passed through unchanged. `BaseTool.invoke()` called with a ToolCall-shaped
     input (what LangGraph's real ToolNode always passes, confirmed by hand)
-    returns a `ToolMessage` instead, which needs its own explicit conversion."""
+    returns a `ToolMessage` instead, which needs its own explicit conversion
+    (kept as its own, original, pre-existing case here rather than folded into
+    `_yaml_safe`'s newer, more general `Message` handling, so an already-
+    recorded cassette's exact `_type: ToolMessage` entries keep working
+    unchanged). Anything else -- a `Command` (a real handoff tool's real
+    result, confirmed against langgraph-swarm-py) or a message nested inside
+    some other structure -- goes through `_yaml_safe`, which didn't exist
+    when this function was first written and this result shape wasn't yet
+    something this project had seen."""
     if isinstance(result, ToolMessage):
         return {"_type": "ToolMessage", "content": result.content, "tool_call_id": result.tool_call_id, "name": result.name}
-    return result
+    return _yaml_safe(result)
 
 
 def _deserialize_tool_result(data: Any) -> Any:
     if isinstance(data, dict) and data.get("_type") == "ToolMessage":
         return ToolMessage(content=data["content"], tool_call_id=data.get("tool_call_id", ""), name=data.get("name"))
-    return data
+    return _restore_value(data)
 
 
 class CallBuffer:
@@ -178,7 +282,7 @@ def intercept(buffer: CallBuffer, replay_ctx: ReplayContext) -> Iterator[None]:
     orig_ainvoke = BaseTool.ainvoke
 
     def patched_chat_invoke(self: BaseChatModel, input, config=None, **kwargs):
-        metadata = (config or {}).get("metadata") or {}
+        metadata = ensure_config(config).get("metadata") or {}
         node = metadata.get("langgraph_node", "?")
         model_name = getattr(self, "model_name", None) or getattr(self, "model", None) or type(self).__name__
 
@@ -191,7 +295,7 @@ def intercept(buffer: CallBuffer, replay_ctx: ReplayContext) -> Iterator[None]:
         return result
 
     async def patched_chat_ainvoke(self: BaseChatModel, input, config=None, **kwargs):
-        metadata = (config or {}).get("metadata") or {}
+        metadata = ensure_config(config).get("metadata") or {}
         node = metadata.get("langgraph_node", "?")
         model_name = getattr(self, "model_name", None) or getattr(self, "model", None) or type(self).__name__
 
@@ -217,7 +321,7 @@ def intercept(buffer: CallBuffer, replay_ctx: ReplayContext) -> Iterator[None]:
         return result
 
     def patched_invoke(self: BaseTool, input, config=None, **kwargs):
-        metadata = (config or {}).get("metadata") or {}
+        metadata = ensure_config(config).get("metadata") or {}
         node = metadata.get("langgraph_node", "?")
         args = input.get("args", input) if isinstance(input, dict) and "args" in input else input
 
@@ -226,7 +330,11 @@ def intercept(buffer: CallBuffer, replay_ctx: ReplayContext) -> Iterator[None]:
 
         start = time.perf_counter()
         try:
-            plain_response, latency_s = resolve_call(replay_ctx, node, "tool", args, real_call, extra={"name": self.name})
+            # args is kept raw for _record_tool_call/the real ToolCall object
+            # (so a test can assert_tool_called(..., args_match={...}) against
+            # the real value) -- only the copy resolve_call sees, for the
+            # cassette and its key hash, needs to be YAML-safe.
+            plain_response, latency_s = resolve_call(replay_ctx, node, "tool", _yaml_safe(args), real_call, extra={"name": self.name})
         except Exception as exc:
             _record_tool_call(self, input, config, result=None, error=str(exc), latency_s=time.perf_counter() - start, buffer=buffer)
             raise
@@ -235,7 +343,7 @@ def intercept(buffer: CallBuffer, replay_ctx: ReplayContext) -> Iterator[None]:
         return result
 
     async def patched_ainvoke(self: BaseTool, input, config=None, **kwargs):
-        metadata = (config or {}).get("metadata") or {}
+        metadata = ensure_config(config).get("metadata") or {}
         node = metadata.get("langgraph_node", "?")
         args = input.get("args", input) if isinstance(input, dict) and "args" in input else input
 
@@ -246,7 +354,7 @@ def intercept(buffer: CallBuffer, replay_ctx: ReplayContext) -> Iterator[None]:
                 latency_s = time.perf_counter() - start
             else:
                 plain_response, latency_s = resolve_call(
-                    replay_ctx, node, "tool", args,
+                    replay_ctx, node, "tool", _yaml_safe(args),
                     lambda: _serialize_tool_result(orig_invoke(self, input, config, **kwargs)),
                     extra={"name": self.name},
                 )
@@ -271,7 +379,7 @@ def intercept(buffer: CallBuffer, replay_ctx: ReplayContext) -> Iterator[None]:
 
 
 def _record_llm_call(model: BaseChatModel, input, config, result, latency_s: float, buffer: CallBuffer) -> None:
-    metadata = (config or {}).get("metadata") or {}
+    metadata = ensure_config(config).get("metadata") or {}
     task_id = _task_id_from_checkpoint_ns(metadata.get("langgraph_checkpoint_ns"))
     if task_id is None:
         # Not running inside a recorded graph (e.g. a direct model.invoke() call in
@@ -300,7 +408,7 @@ def _record_llm_call(model: BaseChatModel, input, config, result, latency_s: flo
 
 
 def _record_tool_call(tool: BaseTool, input, config, *, result: Any, error: str | None, latency_s: float, buffer: CallBuffer) -> None:
-    metadata = (config or {}).get("metadata") or {}
+    metadata = ensure_config(config).get("metadata") or {}
     task_id = _task_id_from_checkpoint_ns(metadata.get("langgraph_checkpoint_ns"))
     if task_id is None:
         return

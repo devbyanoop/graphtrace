@@ -4,7 +4,15 @@ All notable changes to graphtrace are recorded here, following [Keep a Changelog
 
 ## [Unreleased]
 
-Nothing yet — v0.1.0 is the current release; see below.
+### Fixed (2026-10-26) -- found testing against a real external app, not graphtrace's own demo agent
+
+`run_graph()` pointed at a real, official LangGraph app for the first time -- [`langchain-ai/langgraph-swarm-py`](https://github.com/langchain-ai/langgraph-swarm-py) (the LangGraph team's own multi-agent swarm library) -- rather than `examples/refund_agent`, which was hand-written specifically to exercise graphtrace's own features and so never could have surfaced these. Kept as a permanent regression test, `tests/test_langgraph_swarm_compat.py`, gated with `pytest.importorskip` behind the `dev` extra's new `langgraph-swarm` dependency.
+
+- **LangChain 1.x's `create_agent()` doesn't thread an explicit `config` into its model call.** Every LLM call was attributed to node `"?"` -- confirmed by hand that `BaseChatModel.invoke()` receives `config=None` under this newer agent abstraction, with the real metadata reachable only through LangChain's own ambient, contextvar-based config propagation. Fixed in `frameworks/langgraph/interceptors.py` by resolving metadata through `ensure_config(config)` instead of reading `config` directly; what's forwarded to the real underlying call is untouched.
+- **A subgraph's `subgraph_enter`/`subgraph_exit` step pair had their `index` values backwards** (exit lower than its own enter) -- the previous day's subgraph fix created a *new*, later-indexed step for the enter marker while the exit kept the parent's original, earlier one. Fixed in `frameworks/langgraph/recorder.py` by swapping which step plays which role.
+- **A tool call returning `Command(graph=Command.PARENT, ...)` (LangGraph's real handoff mechanism) never gets its own `task_result`/checkpoint, silently dropping the step.** Fixed by absorbing any task still pending under a resolving task's own namespace the instant that resolution happens. A related bug found at the same time: neither the tool's real `args` (which can carry an entire injected graph state, including raw `BaseMessage` objects) nor a real `Command` result were YAML-safe, crashing cassette writes. Fixed with a generic, recursive serializer (`_yaml_safe`/`_restore_value`) that round-trips `BaseMessage` and `Command` correctly through replay -- a real node's own `isinstance(result, Command)` check still sees a real `Command` object after a replay, not a plain dict.
+
+181 tests pass, full regression.
 
 ## [0.1.0] - 2026-10-26
 
