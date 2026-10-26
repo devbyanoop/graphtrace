@@ -16,8 +16,7 @@ from langgraph.types import Command
 from graphtrace.core.trajectory import Trajectory
 from graphtrace.frameworks.langgraph.interceptors import CallBuffer, intercept
 from graphtrace.frameworks.langgraph.recorder import Recorder
-from graphtrace.replay.cassette import Cassette, load_cassette, save_cassette
-from graphtrace.replay.context import ReplayContext
+from graphtrace.replay.context import ReplayContext, build_replay_context, save_if_recording
 from graphtrace.replay.modes import resolve_mode
 
 
@@ -32,35 +31,6 @@ def _ensure_checkpointer(graph: Any) -> None:
     """
     if graph.checkpointer is None:
         graph.checkpointer = MemorySaver()
-
-
-def _build_replay_context(cassette_path: str, mode: str) -> ReplayContext:
-    """`record` starts from an empty Cassette (whatever's on disk gets fully
-    overwritten, per the modes table) -- `replay`/`record_missing` load the
-    existing file first, since both need to look entries up. `live` never reads
-    or writes a cassette at all, but still gets a (never-consulted) empty one so
-    the interceptors don't need a None-check for this one mode specifically.
-    """
-    cassette = load_cassette(cassette_path) if mode in ("replay", "record_missing") else Cassette()
-    return ReplayContext(mode=mode, cassette=cassette)
-
-
-def _save_if_recording(cassette_path: str, mode: str, replay_ctx: ReplayContext) -> None:
-    """Write the cassette back out after the run, for the two modes that produce
-    new entries. `record_missing` keeps whatever already matched plus whatever
-    was newly recorded; `record` is *only* whatever was newly recorded this run --
-    matching the modes table's "Overwritten" (`record`) vs "Appended"
-    (`record_missing`) distinction exactly.
-    """
-    if mode not in ("record", "record_missing") or not replay_ctx.new_entries:
-        return
-    final = Cassette(
-        entries=replay_ctx.cassette.entries + replay_ctx.new_entries,
-        version=replay_ctx.cassette.version,
-        graphtrace=replay_ctx.cassette.graphtrace,
-        recorded_at=replay_ctx.cassette.recorded_at,
-    )
-    save_cassette(final, cassette_path)
 
 
 def _run_one_stream(graph: Any, stream_input: Any, config: dict, recorder: Recorder, buffer: CallBuffer, replay_ctx: ReplayContext) -> None:
@@ -103,7 +73,7 @@ def run_graph(
     run_config = {"configurable": {"thread_id": thread_id, **(config or {})}}
     recorder = Recorder()
     buffer = CallBuffer()
-    replay_ctx = _build_replay_context(cassette, resolved_mode)
+    replay_ctx = build_replay_context(cassette, resolved_mode)
     pending_resumes = list(resume) if resume else []
 
     stream_input: Any = inputs
@@ -113,11 +83,11 @@ def run_graph(
         state = graph.get_state(run_config)
         recorder.flush(state.values)
         if not state.next:
-            _save_if_recording(cassette, resolved_mode, replay_ctx)
+            save_if_recording(cassette, resolved_mode, replay_ctx)
             return Trajectory(steps=recorder.steps, final_state=state.values, interrupted=False, mode=resolved_mode)
 
         if not pending_resumes:
-            _save_if_recording(cassette, resolved_mode, replay_ctx)
+            save_if_recording(cassette, resolved_mode, replay_ctx)
             return Trajectory(steps=recorder.steps, final_state=state.values, interrupted=True, mode=resolved_mode)
 
         stream_input = Command(resume=pending_resumes.pop(0))
@@ -143,7 +113,7 @@ async def arun_graph(
     run_config = {"configurable": {"thread_id": thread_id, **(config or {})}}
     recorder = Recorder()
     buffer = CallBuffer()
-    replay_ctx = _build_replay_context(cassette, resolved_mode)
+    replay_ctx = build_replay_context(cassette, resolved_mode)
     pending_resumes = list(resume) if resume else []
 
     stream_input: Any = inputs
@@ -157,11 +127,11 @@ async def arun_graph(
         state = await graph.aget_state(run_config)
         recorder.flush(state.values)
         if not state.next:
-            _save_if_recording(cassette, resolved_mode, replay_ctx)
+            save_if_recording(cassette, resolved_mode, replay_ctx)
             return Trajectory(steps=recorder.steps, final_state=state.values, interrupted=False, mode=resolved_mode)
 
         if not pending_resumes:
-            _save_if_recording(cassette, resolved_mode, replay_ctx)
+            save_if_recording(cassette, resolved_mode, replay_ctx)
             return Trajectory(steps=recorder.steps, final_state=state.values, interrupted=True, mode=resolved_mode)
 
         stream_input = Command(resume=pending_resumes.pop(0))

@@ -50,6 +50,21 @@ def resolve_call(
 
     if ctx.mode in ("replay", "record_missing"):
         entry = ctx.cassette.find(key)
+        if entry is None:
+            # Positional fallback, for cassettes codegen/test_writer.py builds from an
+            # *imported* trace. Those entries can never satisfy the exact hash match
+            # above: the request field recorded there is whatever shape the original
+            # observability platform exported (e.g. Langfuse's own JSON "input"), not
+            # the real `str(list[BaseMessage])` the live interceptor hashes at replay
+            # time -- there is no transformation that reconciles the two in general.
+            # codegen marks its entries with the literal hash segment "any" (never a
+            # real value: hash_request always returns 12 hex characters) to opt into
+            # this looser, position-only match -- same node/kind/occurrence, content
+            # ignored. Entries written by the normal record path keep the real hash,
+            # so this fallback can never accidentally match one of those instead of
+            # correctly raising CassetteMismatchError on a genuine miss.
+            occurrence = key.rsplit("/", 1)[-1]
+            entry = ctx.cassette.find(f"{node}/{kind}/any/{occurrence}")
         if entry is not None:
             if entry.get("error") is not None:
                 raise RuntimeError(to_plain_python(entry["error"]))

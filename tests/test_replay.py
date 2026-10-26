@@ -214,6 +214,32 @@ def test_resolve_call_replay_mode_reraises_a_recorded_failure_as_runtime_error()
         resolve_call(ctx, "node_a", "tool", {"x": 1}, lambda: "unreachable")
 
 
+def test_resolve_call_replay_mode_falls_back_to_positional_any_match():
+    """codegen/test_writer.py's cassettes use the literal hash segment "any"
+    (see engine.py's own comment) because an imported trace's recorded request
+    can never hash-match the real LangChain input at replay time. Confirms the
+    fallback actually works, keyed only on node/kind/occurrence."""
+    cassette = Cassette()
+    cassette.append({"key": "node_a/tool/any/0", "kind": "tool", "node": "node_a", "response": "from imported trace", "latency_s": 0.2})
+    ctx = ReplayContext(mode="replay", cassette=cassette)
+
+    result, latency_s = resolve_call(ctx, "node_a", "tool", {"this request": "does not match anything recorded"}, lambda: (_ for _ in ()).throw(AssertionError("must never be called")))
+    assert result == "from imported trace"
+
+
+def test_resolve_call_replay_mode_prefers_exact_hash_match_over_any_fallback():
+    """A real hash match must win even when an "any" entry also exists for the
+    same node/kind/occurrence -- the fallback is only ever a last resort, never
+    allowed to shadow a legitimate recorded entry."""
+    cassette = Cassette()
+    cassette.append({"key": "node_a/tool/any/0", "kind": "tool", "node": "node_a", "response": "wrong one"})
+    cassette.append({"key": "node_a/tool/" + hash_request({"x": 1}) + "/0", "kind": "tool", "node": "node_a", "response": "correct one"})
+    ctx = ReplayContext(mode="replay", cassette=cassette)
+
+    result, latency_s = resolve_call(ctx, "node_a", "tool", {"x": 1}, lambda: None)
+    assert result == "correct one"
+
+
 def test_resolve_call_record_missing_mode_replays_an_existing_match_but_records_a_new_one():
     cassette = Cassette()
     cassette.append({"key": "node_a/tool/" + hash_request({"x": 1}) + "/0", "kind": "tool", "node": "node_a", "response": "cached", "latency_s": 0.1})
