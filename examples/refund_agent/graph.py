@@ -11,8 +11,11 @@ calls" -- it does not mean "real paid API calls."
 
 from __future__ import annotations
 
+import itertools
 from typing import Any, TypedDict
 
+from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
@@ -118,3 +121,14 @@ def build_refund_graph(chat_model: Any, *, fail_lookup_times: int = 0, max_looku
     g.add_edge("give_up", END)
 
     return g.compile()
+
+
+def build_refund_graph_demo():
+    """A zero-argument convenience wrapper around `build_refund_graph`, for
+    `graphtrace from-trace`'s own end-to-end demonstration/test (cli.py's
+    "--target" needs something real and *importable with no arguments* to
+    point at). Not what a real caller should use -- a real one has a real
+    chat model and calls `build_refund_graph(that_model)` directly, same as
+    every test in test_demo_agent.py does.
+    """
+    return build_refund_graph(GenericFakeChatModel(messages=itertools.repeat(AIMessage(content="ok"))))

@@ -1,0 +1,39 @@
+name: graphtrace CI
+
+# Tests graphtrace's own source -- the pytest suite under tests/ (all of which
+# runs in replay/record mode against fake chat models, so no real LLM provider
+# key is needed here), plus a strict docs build. Scoped to exactly what
+# BUILD_PLAN.md section 7.6 names (no ruff/mypy gate -- unlike kbguard, neither
+# is configured in this project yet; adding that gate without the config behind
+# it would just be a step that always no-ops).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install graphtrace with dev extras
+        run: pip install -e ".[dev]"
+
+      - name: pytest
+        run: pytest -q
+
+      - name: mkdocs build --strict
+        run: |
+          pip install -e ".[docs]"
+          mkdocs build --strict

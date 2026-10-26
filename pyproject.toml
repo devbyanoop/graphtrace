@@ -38,6 +38,9 @@ docs = [
 [project.entry-points.pytest11]
 graphtrace = "graphtrace.plugin"
 
+[project.scripts]
+graphtrace = "graphtrace.cli:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/graphtrace"]
 

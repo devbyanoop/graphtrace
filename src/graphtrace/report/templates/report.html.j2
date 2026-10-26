@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ title }}</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem; color: #1a1a1a; background: #fff; }
+  h1 { margin-bottom: 0.5rem; }
+  .summary { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.5rem; }
+  .summary div { padding: 0.4rem 0.9rem; border-radius: 6px; background: #f1f1f1; font-size: 0.95em; }
+  .passed { color: #146c2e; }
+  .failed { color: #b42318; }
+  .errored { color: #b45309; }
+  .test { border: 1px solid #ddd; border-radius: 8px; margin-bottom: 1rem; padding: 1rem 1.25rem; }
+  .test.failed { border-color: #f3b3ab; background: #fff5f4; }
+  .test.error { border-color: #fcd9a0; background: #fffaf0; }
+  .test h2 { margin: 0 0 0.5rem 0; font-size: 1.05em; }
+  .verdict.pass { color: #146c2e; font-weight: 600; }
+  .verdict.fail { color: #b42318; font-weight: 600; }
+  .step { margin: 0.35rem 0 0.35rem 0.5rem; padding: 0.4rem 0.7rem; border-left: 3px solid #ccc; }
+  .call { margin: 0.25rem 0 0.25rem 1rem; font-size: 0.9em; color: #333; }
+  pre { white-space: pre-wrap; word-break: break-word; background: #f7f7f7; padding: 0.5rem; border-radius: 4px; margin: 0.25rem 0; }
+</style>
+</head>
+<body>
+<h1>{{ title }}</h1>
+<div class="summary">
+  <div>{{ summary.total }} tests</div>
+  <div class="passed">{{ summary.passed }} passed</div>
+  <div class="failed">{{ summary.failed }} failed</div>
+  <div class="errored">{{ summary.errored }} errored</div>
+  <div>${{ "%.4f"|format(summary.total_cost_usd) }} total cost</div>
+  <div>{{ "%.2f"|format(summary.total_latency_s) }}s total latency</div>
+</div>
+
+{% for result in results %}
+<div class="test {{ result.outcome }}">
+  <h2>{{ result.test_id }} &mdash; <span class="verdict {{ 'pass' if result.outcome == 'passed' else 'fail' }}">{{ result.outcome }}</span></h2>
+
+  {% if result.error_message %}
+  <pre class="error">{{ result.error_message }}</pre>
+  {% endif %}
+
+  {% if result.judge_verdicts %}
+  <h3>Judge verdicts</h3>
+  <ul>
+    {% for verdict in result.judge_verdicts %}
+    <li>
+      <span class="verdict {{ 'pass' if verdict.passed else 'fail' }}">{{ verdict.rubric_id }}: {{ 'pass' if verdict.passed else 'fail' }}</span>
+      <ul>
+        {% for criterion_id, criterion in verdict.criteria.items() %}
+        <li>{{ criterion_id }}: {{ criterion }}</li>
+        {% endfor %}
+      </ul>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if result.trajectory %}
+  <p>
+    cost: ${{ "%.4f"|format(result.trajectory.cost_usd) }}
+    &middot; latency: {{ "%.2f"|format(result.trajectory.latency_s) }}s
+    &middot; tokens: {{ result.trajectory.tokens_total }}
+    {% if result.trajectory.interrupted %}&middot; interrupted{% endif %}
+  </p>
+
+  <h3>Trajectory</h3>
+  {% for step in result.trajectory.steps %}
+  <div class="step">
+    <strong>[{{ step.index }}] {{ step.node }}</strong> ({{ step.kind }}, {{ "%.2f"|format(step.latency_s) }}s)
+    {% for call in step.llm_calls %}
+    <div class="call">
+      llm &middot; {{ call.model }} &middot; {{ call.prompt_tokens }}+{{ call.completion_tokens }} tokens &middot; ${{ "%.4f"|format(call.cost_usd) }}
+      <pre>{{ call.output }}</pre>
+    </div>
+    {% endfor %}
+    {% for call in step.tool_calls %}
+    <div class="call">
+      tool &middot; {{ call.name }}({{ call.args }})
+      {% if call.error %}
+      <span class="verdict fail">error: {{ call.error }}</span>
+      {% else %}
+      &rarr; <pre>{{ call.result }}</pre>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+  {% if result.trajectory.final_message %}
+  <h3>Final message</h3>
+  <pre>{{ result.trajectory.final_message }}</pre>
+  {% endif %}
+  {% endif %}
+</div>
+{% endfor %}
+</body>
+</html>

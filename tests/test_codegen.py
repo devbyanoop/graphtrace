@@ -101,32 +101,69 @@ def test_generate_test_assigns_distinct_occurrences_for_repeated_node_visits(tmp
     assert entries[1]["key"] == "router/llm/any/1"
 
 
-# -- generate_test: the rendered pytest file ----------------------------------------------
+# -- generate_test: the rendered pytest file -----------------------------------------------
+#
+# Targets below are real, already-importable graphtrace symbols, not a
+# fabricated "my_app.graph:build_graph" -- `_factory_needs_manual_construction`
+# genuinely imports and inspects whatever `target` names, so a nonexistent
+# module would always fall into its own (also tested, separately, below)
+# import-failure branch instead of exercising the real zero-arg/needs-args
+# logic this is actually meant to prove.
+#
+# graphtrace.replay.matcher:Matcher -- a dataclass with every field defaulted,
+# so Matcher() is a genuinely valid zero-arg call.
+# graphtrace.judge.client:JudgeClient -- a dataclass whose one field (`model`)
+# has no default, so JudgeClient() would raise TypeError; needs manual
+# construction, the same real shape this project's own
+# `build_refund_graph(chat_model, ...)` has.
+
+_ZERO_ARG_TARGET = "graphtrace.replay.matcher:Matcher"
+_NEEDS_ARGS_TARGET = "graphtrace.judge.client:JudgeClient"
+
 
 def test_generate_test_renders_syntactically_valid_python(tmp_path: Path):
-    source = generate_test(_trace(), target="my_app.graph:build_graph", test_name="refund_flow", cassette_path=tmp_path / "c.yaml")
+    source = generate_test(_trace(), target=_ZERO_ARG_TARGET, test_name="refund_flow", cassette_path=tmp_path / "c.yaml")
     ast.parse(source)  # raises SyntaxError if this is ever not valid Python
 
 
-def test_generate_test_renders_the_real_target_import_and_call_signature(tmp_path: Path):
-    source = generate_test(_trace(), target="my_app.graph:build_graph", test_name="refund_flow", cassette_path=tmp_path / "c.yaml")
-    assert "from my_app.graph import build_graph" in source
+def test_generate_test_calls_a_zero_arg_factory_directly(tmp_path: Path):
+    source = generate_test(_trace(), target=_ZERO_ARG_TARGET, test_name="refund_flow", cassette_path=tmp_path / "c.yaml")
+    assert "from graphtrace.replay.matcher import Matcher" in source
     assert "def test_refund_flow():" in source
-    assert "graph = build_graph()" in source
+    assert "graph = Matcher()" in source
     assert 'mode="replay"' in source
     assert "{'question': 'refund?'}" in source  # initial_input, rendered via repr
-    assert "['router', 'lookup_order']" in source  # observed_path
+    assert "assert_visited(trajectory, 'router')" in source
+    assert "assert_visited(trajectory, 'lookup_order')" in source
     assert "# TODO: assert the correct behaviour" in source
 
 
+def test_generate_test_flags_a_factory_that_needs_real_arguments(tmp_path: Path):
+    """The honest alternative to guessing: a factory shaped like this project's
+    own build_refund_graph(chat_model, ...) can't be called with zero
+    arguments -- confirmed by actually importing JudgeClient and inspecting its
+    signature, not assumed."""
+    source = generate_test(_trace(), target=_NEEDS_ARGS_TARGET, test_name="t", cassette_path=tmp_path / "c.yaml")
+    assert "graph = JudgeClient(...)  # TODO:" in source
+    assert "takes required arguments" in source
+
+
+def test_generate_test_treats_an_unimportable_target_as_needing_manual_construction(tmp_path: Path):
+    """No way to know what a nonexistent module's factory needs -- the cautious
+    default (flag it, don't guess zero-arg) applies here too, even though the
+    generated file's own top-level import will fail regardless."""
+    source = generate_test(_trace(), target="no_such_module_xyz:build_graph", test_name="t", cassette_path=tmp_path / "c.yaml")
+    assert "graph = build_graph(...)  # TODO:" in source
+
+
 def test_generate_test_omits_resume_stub_when_not_interrupted(tmp_path: Path):
-    source = generate_test(_trace(), target="my_app.graph:build_graph", test_name="t", cassette_path=tmp_path / "c.yaml")
+    source = generate_test(_trace(), target=_ZERO_ARG_TARGET, test_name="t", cassette_path=tmp_path / "c.yaml")
     assert "resume=" not in source
 
 
 def test_generate_test_includes_resume_stub_when_interrupted(tmp_path: Path):
     trace = NormalizedTrace(spans=_trace().spans, interrupted=True)
-    source = generate_test(trace, target="my_app.graph:build_graph", test_name="t", cassette_path=tmp_path / "c.yaml")
+    source = generate_test(trace, target=_ZERO_ARG_TARGET, test_name="t", cassette_path=tmp_path / "c.yaml")
     assert "resume=[...],  # TODO" in source
 
 
@@ -135,6 +172,19 @@ def test_generate_test_defaults_initial_input_to_empty_dict_when_unknown(tmp_pat
     documented, honest gap) -- the generated test must still be valid, with an
     empty dict standing in rather than a literal None breaking run_graph()."""
     trace = NormalizedTrace(spans=_trace().spans, initial_input=None)
-    source = generate_test(trace, target="my_app.graph:build_graph", test_name="t", cassette_path=tmp_path / "c.yaml")
+    source = generate_test(trace, target=_ZERO_ARG_TARGET, test_name="t", cassette_path=tmp_path / "c.yaml")
     ast.parse(source)
     assert "run_graph(\n        graph,\n        {}," in source
+
+
+def test_generate_test_deduplicates_observed_nodes_preserving_first_occurrence_order(tmp_path: Path):
+    """A node visited twice (a retry loop) must get one assert_visited line, not
+    one per visit -- assert_visited already means "at least once"."""
+    trace = NormalizedTrace(spans=[
+        NormalizedSpan(node="router", kind="llm", request="a", response="x", model="m"),
+        NormalizedSpan(node="lookup_order", kind="tool", request="b", response="y", name="lookup_order"),
+        NormalizedSpan(node="router", kind="llm", request="c", response="z", model="m"),
+    ])
+    source = generate_test(trace, target=_ZERO_ARG_TARGET, test_name="t", cassette_path=tmp_path / "c.yaml")
+    assert source.count("assert_visited(trajectory, 'router')") == 1
+    assert source.index("assert_visited(trajectory, 'router')") < source.index("assert_visited(trajectory, 'lookup_order')")

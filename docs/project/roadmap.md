@@ -2,7 +2,7 @@
 
 This page is the single source of truth for "is X actually built yet?" — updated the same day any item's status changes, not retroactively. If a page elsewhere in this guide seems to claim more than this page shows as done, trust this page.
 
-**Last updated:** 2026-10-22
+**Last updated:** 2026-10-26
 
 ## Phase 0 — scaffold
 
@@ -48,9 +48,28 @@ This page is the single source of truth for "is X actually built yet?" — updat
 
 **103 tests pass today** (`pytest` from a clean `pip install -e ".[dev]"`) — full regression, every file, in about 2 seconds. See [Installation](../getting-started/installation.md) to verify this yourself.
 
-## Week 3+ — not started
+## Week 3 — judge, trace-to-test, report, CLI
 
-The judge contract, trace-to-test importers, the CLI, and the HTML report are all still at the design stage. See [Judge & calibration](../guide/judge-and-calibration.md), [Trace-to-test](../guide/trace-to-test.md), and [Report & CI](../guide/report-and-ci.md) for scope. Redaction and custom normalize rules (both part of Week 2's original scope) are also still not built — see [Recording & replay](../guide/recording-and-replay.md) for that specific gap.
+**Goal (per the build plan):** the judge contract and calibration, trace importers (Langfuse/OTel/LangSmith), `codegen/test_writer.py`, the HTML report, and a real `graphtrace` CLI — flipping every "Planned" guide page above from aspiration to real, verified behaviour.
+
+**Status: met (2026-10-26).**
+
+- [x] `judge/rubric.py`, `judge/client.py` — strict pydantic `Rubric`/`Criterion`, `JudgeClient` (`litellm` imported lazily, inside `ask_json()` alone — constructing a client or hitting a cassette-replayed verdict never needs it installed), `grade()` reusing `replay/engine.resolve_call()` directly so a judge verdict is cached exactly like an LLM/tool call.
+- [x] `judge/calibrate.py` — per-criterion agreement and Cohen's kappa against a human-labelled calibration set. **Real correction found by checking the math by hand**: this project's own build plan originally claimed "full disagreement scores kappa 0.0" — false for balanced labels; a perfect inversion actually scores **-1.0** (real anti-correlation, worse than chance), confirmed against both the hand-derived formula and the real installed `sklearn`. See [Judge & calibration](../guide/judge-and-calibration.md) for the corrected explanation.
+- [x] `importers/base.py`, `importers/{langfuse,otel,langsmith}.py` — one shared `NormalizedTrace`/`NormalizedSpan` shape, one small `TraceImporter` protocol per source. None of the three are verified against a live export from a real account (no account access) — each module's own docstring says exactly what's confirmed vs. representative-but-unverified, rather than overclaiming.
+- [x] `codegen/test_writer.py` — `graphtrace from-trace`. **Two real design gaps found and fixed while building this, not assumed away:**
+    1. An imported trace's `request` field can never hash-match the real `str(list[BaseMessage])` the live LangGraph interceptor hashes at replay time (different platforms serialize completely differently) — `replay/engine.py` gained a position-only fallback match (`node/kind/any/occurrence`), scoped so it can never shadow a real recorded cassette entry.
+    2. A generated test originally asserted the *exact* path (`assert_path`) from the trace's spans — but spans only capture LLM/tool calls, so a node that makes neither (a routing branch, an interrupt point) is invisible to every importer. Asserting an exact path from that would be a false promise; the generated test now asserts `assert_visited` per node that made a captured call instead, with a TODO pointing at `assert_path`/`assert_tool_calls_match` for tightening it by hand. Also: a factory requiring arguments (this project's own `build_refund_graph(chat_model, ...)` is written exactly that way) is now detected by actually importing `--target` and inspecting its signature, rather than assuming every factory is zero-argument.
+- [x] `report/results.py`, `report/html.py` — `TestResult` (JSON-safe by construction), Jinja2 `autoescape=True` (confirmed with a real XSS test: trajectory state containing `<script>` renders escaped). Verified against a real `run_graph()` Trajectory from the Week 1 demo agent, not just a hand-built one.
+- [x] `plugin.py` extended: `--gt-report=<path>` collects a `TestResult` per test (including a distinct `"error"` outcome for a test whose fixture failed before the body ran) and renders the HTML report — plus a `results.json` alongside it — at session end.
+- [x] `cli.py`, `[project.scripts]` — a real `graphtrace` console command: `from-trace`, `calibrate`, `report`. **The actual verify-by**: a real Langfuse-shaped trace fixture, run through `graphtrace from-trace` for real, produces a generated test file that a real `pytest --gt-mode=replay` subprocess run then passes — checked end to end, not just that `generate_test()` returns *some* string.
+- [x] `.github/workflows/graphtrace.yml` — `pytest` + `mkdocs build --strict` on every push/PR, both confirmed green locally before committing to the claim.
+
+**169 tests pass today**, full regression. See [Judge & calibration](../guide/judge-and-calibration.md), [Trace-to-test](../guide/trace-to-test.md), [Report & CI](../guide/report-and-ci.md), and the [CLI reference](../reference/cli.md).
+
+## Week 4 — not started
+
+README quickstart rewrite, a docs sweep for anything missed, PyPI packaging check (a real wheel install in a clean venv — the template files `report/html.py` loads via `FileSystemLoader` haven't been confirmed to survive a real wheel build yet, only the editable-install dev loop), a sample converted trace / sample report as a portfolio artifact, and a release write-up. Redaction and custom normalize rules (both part of Week 2's original scope) are also still not built — see [Recording & replay](../guide/recording-and-replay.md) for that specific gap.
 
 ## v0.2 — not started, not scheduled for v0.1
 

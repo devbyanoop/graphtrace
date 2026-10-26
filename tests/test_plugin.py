@@ -131,3 +131,77 @@ def test_run_graph_fixture_defaults_to_live_mode_with_no_flag_and_no_config(pyte
     ))
     result = pytester.runpytest()
     result.assert_outcomes(passed=1)
+
+
+# -- Week 3: --gt-report ------------------------------------------------------------------
+
+def test_gt_report_writes_an_html_report_with_a_passing_and_a_failing_test(pytester):
+    pytester.makepyfile(_test_file(
+        """
+        def test_passes(run_graph):
+            traj = run_graph(_build_graph(), {"x": 0}, mode="record")
+            assert traj.final_state == {"x": 1}
+
+        def test_fails(run_graph):
+            run_graph(_build_graph(), {"x": 0}, mode="record")
+            assert False
+        """
+    ))
+    report_path = pytester.path / "report.html"
+    result = pytester.runpytest(f"--gt-report={report_path}")
+    result.assert_outcomes(passed=1, failed=1)
+
+    assert report_path.exists()
+    html = report_path.read_text(encoding="utf-8")
+    assert "test_passes" in html and "test_fails" in html
+    assert "1 passed" in html and "1 failed" in html
+
+
+def test_gt_report_includes_the_real_trajectory_from_run_graph(pytester):
+    pytester.makepyfile(_test_file(
+        """
+        def test_increments(run_graph):
+            run_graph(_build_graph(), {"x": 0}, mode="record")
+        """
+    ))
+    report_path = pytester.path / "report.html"
+    pytester.runpytest(f"--gt-report={report_path}")
+
+    html = report_path.read_text(encoding="utf-8")
+    assert "[0] a" in html  # the single node in _LINEAR_GRAPH_SNIPPET's graph
+
+
+def test_gt_report_reports_a_setup_error_distinctly_without_a_trajectory(pytester):
+    """A fixture that blows up before the test body runs at all -- no run_graph
+    call happened, so there's no Trajectory, but it must still show up in the
+    report as something that needs attention, not be silently dropped."""
+    pytester.makepyfile(_test_file(
+        """
+        import pytest
+
+        @pytest.fixture
+        def broken():
+            raise RuntimeError("fixture setup exploded")
+
+        def test_with_broken_fixture(broken):
+            pass
+        """
+    ))
+    report_path = pytester.path / "report.html"
+    result = pytester.runpytest(f"--gt-report={report_path}")
+    result.assert_outcomes(errors=1)
+
+    html = report_path.read_text(encoding="utf-8")
+    assert "1 errored" in html
+    assert "fixture setup exploded" in html
+
+
+def test_without_gt_report_flag_no_report_file_is_written(pytester):
+    pytester.makepyfile(_test_file(
+        """
+        def test_plain(run_graph):
+            run_graph(_build_graph(), {"x": 0}, mode="record")
+        """
+    ))
+    pytester.runpytest()
+    assert not (pytester.path / "report.html").exists()
