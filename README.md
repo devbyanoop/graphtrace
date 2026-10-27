@@ -3,9 +3,9 @@
 **Regression testing for LangGraph agents — as a pytest plugin.**
 
 [![CI](https://github.com/devbyanoop/graphtrace/actions/workflows/graphtrace.yml/badge.svg)](https://github.com/devbyanoop/graphtrace/actions/workflows/graphtrace.yml)
-[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
-[![Status: v0.1 complete](https://img.shields.io/badge/status-v0.1%20complete-brightgreen.svg)](docs/project/roadmap.md)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/devbyanoop/graphtrace/blob/main/LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://github.com/devbyanoop/graphtrace/blob/main/pyproject.toml)
+[![Status: v0.1 complete](https://img.shields.io/badge/status-v0.1%20complete-brightgreen.svg)](https://github.com/devbyanoop/graphtrace/blob/main/docs/project/roadmap.md)
 
 ## The problem
 
@@ -66,7 +66,7 @@ pytest --gt-mode=replay --gt-report=reports/graphtrace.html
 | CrewAI | Planned — v0.4 |
 | AutoGen | Planned — v0.4 |
 
-The recording layer is built behind a `FrameworkRunner` protocol specifically so CrewAI/AutoGen support (v0.4) is a new package later, not a rewrite of this one — see [Multi-framework support](docs/guide/multi-framework.md).
+The recording layer is built behind a `FrameworkRunner` protocol specifically so CrewAI/AutoGen support (v0.4) is a new package later, not a rewrite of this one — see [Multi-framework support](https://github.com/devbyanoop/graphtrace/blob/main/docs/guide/multi-framework.md).
 
 ## Installation
 
@@ -81,7 +81,7 @@ source .venv/bin/activate   # Windows (Git Bash): source .venv/Scripts/activate
 pip install -e ".[dev]"
 ```
 
-See [Installation](docs/getting-started/installation.md) for the full breakdown, including the `docs` extra for building the documentation site locally.
+See [Installation](https://github.com/devbyanoop/graphtrace/blob/main/docs/getting-started/installation.md) for the full breakdown, including the `docs` extra for building the documentation site locally.
 
 ## Quickstart
 
@@ -91,35 +91,35 @@ The bundled demo agent needs no vector database, API key, or setup of your own:
 pytest tests/test_demo_agent.py -v
 ```
 
-Full walkthrough — building a `Trajectory` by hand, running it against the real demo agent, and what happens on an unresolved interrupt — in [Quickstart](docs/getting-started/quickstart.md).
+Full walkthrough — building a `Trajectory` by hand, running it against the real demo agent, and what happens on an unresolved interrupt — in [Quickstart](https://github.com/devbyanoop/graphtrace/blob/main/docs/getting-started/quickstart.md).
 
 Pointing this at your own LangGraph agent is a matter of calling `run_graph(your_compiled_graph, your_inputs, cassette=...)` in your own test, not a framework migration.
 
 ## Documentation
 
-Full guide (core concepts, every assertion, recording & replay, judge & calibration, trace-to-test, report & CI, configuration, the CLI, the roadmap) lives under [`docs/`](docs/) — build it locally with `mkdocs serve`, or browse the Markdown directly on GitHub.
+Full guide (core concepts, every assertion, recording & replay, judge & calibration, trace-to-test, report & CI, configuration, the CLI, the roadmap) lives under [`docs/`](https://github.com/devbyanoop/graphtrace/tree/main/docs) — build it locally with `mkdocs serve`, or browse the Markdown directly on GitHub.
 
-- [Getting started](docs/getting-started/installation.md) / [Quickstart](docs/getting-started/quickstart.md)
-- [Assertions reference](docs/guide/assertions.md)
-- [Recording & replay](docs/guide/recording-and-replay.md)
-- [Judge & calibration](docs/guide/judge-and-calibration.md)
-- [Trace-to-test](docs/guide/trace-to-test.md)
-- [Report & CI](docs/guide/report-and-ci.md)
-- [CLI reference](docs/reference/cli.md)
-- [Configuration reference](docs/guide/configuration.md)
-- [Roadmap & status](docs/project/roadmap.md) — what's actually built vs. planned, updated the same day anything changes
-- [Case study](docs/project/case-study.md) — the five real bugs found building this, and what they say about how it was built
+- [Getting started](https://github.com/devbyanoop/graphtrace/blob/main/docs/getting-started/installation.md) / [Quickstart](https://github.com/devbyanoop/graphtrace/blob/main/docs/getting-started/quickstart.md)
+- [Assertions reference](https://github.com/devbyanoop/graphtrace/blob/main/docs/guide/assertions.md)
+- [Recording & replay](https://github.com/devbyanoop/graphtrace/blob/main/docs/guide/recording-and-replay.md)
+- [Judge & calibration](https://github.com/devbyanoop/graphtrace/blob/main/docs/guide/judge-and-calibration.md)
+- [Trace-to-test](https://github.com/devbyanoop/graphtrace/blob/main/docs/guide/trace-to-test.md)
+- [Report & CI](https://github.com/devbyanoop/graphtrace/blob/main/docs/guide/report-and-ci.md)
+- [CLI reference](https://github.com/devbyanoop/graphtrace/blob/main/docs/reference/cli.md)
+- [Configuration reference](https://github.com/devbyanoop/graphtrace/blob/main/docs/guide/configuration.md)
+- [Roadmap & status](https://github.com/devbyanoop/graphtrace/blob/main/docs/project/roadmap.md) — what's actually built vs. planned, updated the same day anything changes
+- [Case study](https://github.com/devbyanoop/graphtrace/blob/main/docs/project/case-study.md) — the five real bugs found building this, and what they say about how it was built
 
 ## Project status
 
-**v0.1 is complete — 222 tests pass, full regression.** The core `Trajectory` model, the full 12-function assertion API, the real LangGraph recording layer (including subgraphs), record/replay cassettes, the judge contract with calibration (verified against a real live model), trace-to-test from a production export, a real `graphtrace` CLI, the HTML report, and CI are all built and verified — not just against mocks and hand-built fixtures, but against real upstream sources (confirmed real `litellm`/Groq calls, the real `openinference-semantic-conventions` source, a real wheel build in a genuinely isolated clean venv). Beyond the bundled demo agent, graphtrace has also been run against two real, official external LangGraph apps — [`langchain-ai/langgraph-swarm-py`](https://github.com/langchain-ai/langgraph-swarm-py) and [`langchain-ai/deepagents`](https://github.com/langchain-ai/deepagents) — across 25 real scenarios spanning ten distinct categories (handoff, delegation, permissions, safety, and more), which found and fixed four real bugs this project's own demo agent never could have surfaced. See [Roadmap & status](docs/project/roadmap.md) for the full, honest account of each one. v0.2 (security test pack, observability export, cut-point replay, statistical live-mode verification) and v0.4 (CrewAI/AutoGen support) are designed but not started.
+**v0.1 is complete — 222 tests pass, full regression.** The core `Trajectory` model, the full 12-function assertion API, the real LangGraph recording layer (including subgraphs), record/replay cassettes, the judge contract with calibration (verified against a real live model), trace-to-test from a production export, a real `graphtrace` CLI, the HTML report, and CI are all built and verified — not just against mocks and hand-built fixtures, but against real upstream sources (confirmed real `litellm`/Groq calls, the real `openinference-semantic-conventions` source, a real wheel build in a genuinely isolated clean venv). Beyond the bundled demo agent, graphtrace has also been run against two real, official external LangGraph apps — [`langchain-ai/langgraph-swarm-py`](https://github.com/langchain-ai/langgraph-swarm-py) and [`langchain-ai/deepagents`](https://github.com/langchain-ai/deepagents) — across 25 real scenarios spanning ten distinct categories (handoff, delegation, permissions, safety, and more), which found and fixed four real bugs this project's own demo agent never could have surfaced. See [Roadmap & status](https://github.com/devbyanoop/graphtrace/blob/main/docs/project/roadmap.md) for the full, honest account of each one. v0.2 (security test pack, observability export, cut-point replay, statistical live-mode verification) and v0.4 (CrewAI/AutoGen support) are designed but not started.
 
 ## Contributing
 
-Issues and PRs welcome. See [Contributing](docs/project/contributing.md) for how the test suite and docs policy work.
+Issues and PRs welcome. See [Contributing](https://github.com/devbyanoop/graphtrace/blob/main/docs/project/contributing.md) for how the test suite and docs policy work.
 
 ## License
 
-Apache License 2.0 — see [LICENSE](LICENSE).
+Apache License 2.0 — see [LICENSE](https://github.com/devbyanoop/graphtrace/blob/main/LICENSE).
 
 Copyright 2026 Anoop Singh.
