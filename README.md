@@ -2,6 +2,7 @@
 
 **Regression testing for LangGraph agents — as a pytest plugin.**
 
+[![CI](https://github.com/devbyanoop/graphtrace/actions/workflows/graphtrace.yml/badge.svg)](https://github.com/devbyanoop/graphtrace/actions/workflows/graphtrace.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 [![Status: v0.1 complete](https://img.shields.io/badge/status-v0.1%20complete-brightgreen.svg)](docs/project/roadmap.md)
@@ -111,7 +112,7 @@ Full guide (core concepts, every assertion, recording & replay, judge & calibrat
 
 ## Project status
 
-**v0.1 is complete — 222 tests pass, full regression.** The core `Trajectory` model, the full 12-function assertion API, the real LangGraph recording layer (including subgraphs), record/replay cassettes, the judge contract with calibration (verified against a real live model), trace-to-test from a production export, a real `graphtrace` CLI, the HTML report, and CI are all built and verified — not just against mocks and hand-built fixtures, but against real upstream sources (confirmed real `litellm`/Groq calls, the real `openinference-semantic-conventions` source, a real wheel build in a genuinely isolated clean venv). Several real bugs were found and fixed along the way rather than assumed away — see [Roadmap & status](docs/project/roadmap.md) for the full, honest account of each one. v0.2 (security test pack, observability export, cut-point replay, statistical live-mode verification) and v0.4 (CrewAI/AutoGen support) are designed but not started.
+**v0.1 is complete — 222 tests pass, full regression.** The core `Trajectory` model, the full 12-function assertion API, the real LangGraph recording layer (including subgraphs), record/replay cassettes, the judge contract with calibration (verified against a real live model), trace-to-test from a production export, a real `graphtrace` CLI, the HTML report, and CI are all built and verified — not just against mocks and hand-built fixtures, but against real upstream sources (confirmed real `litellm`/Groq calls, the real `openinference-semantic-conventions` source, a real wheel build in a genuinely isolated clean venv). Beyond the bundled demo agent, graphtrace has also been run against two real, official external LangGraph apps — [`langchain-ai/langgraph-swarm-py`](https://github.com/langchain-ai/langgraph-swarm-py) and [`langchain-ai/deepagents`](https://github.com/langchain-ai/deepagents) — across 25 real scenarios spanning ten distinct categories (handoff, delegation, permissions, safety, and more), which found and fixed four real bugs this project's own demo agent never could have surfaced. See [Roadmap & status](docs/project/roadmap.md) for the full, honest account of each one. v0.2 (security test pack, observability export, cut-point replay, statistical live-mode verification) and v0.4 (CrewAI/AutoGen support) are designed but not started.
 
 ## Contributing
 

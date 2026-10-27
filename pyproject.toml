@@ -10,6 +10,16 @@ readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
 authors = [{ name = "Anoop Singh" }]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: Pytest",
+    "Topic :: Software Development :: Testing",
+]
 # Dependencies are added as the code that needs them gets built, not up front.
 # langgraph/langchain-core landed the week frameworks/langgraph/ did; litellm,
 # pydantic, ruamel.yaml etc. will each show up the same way, the same week the
@@ -24,6 +34,12 @@ dependencies = [
     "jinja2>=3.1,<4",
     "typer>=0.12,<1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/devbyanoop/graphtrace"
+Repository = "https://github.com/devbyanoop/graphtrace"
+Issues = "https://github.com/devbyanoop/graphtrace/issues"
+Documentation = "https://github.com/devbyanoop/graphtrace/tree/main/docs"
 
 [project.optional-dependencies]
 dev = [
