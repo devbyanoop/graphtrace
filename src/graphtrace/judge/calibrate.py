@@ -11,9 +11,12 @@ calibration run would defeat the entire point of it (confirming the judge's
 from __future__ import annotations
 
 import json
+import math
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
+from sklearn.exceptions import UndefinedMetricWarning
 from sklearn.metrics import cohen_kappa_score
 
 from graphtrace.judge.client import JudgeClient, build_prompt
@@ -76,6 +79,18 @@ def calibrate(client: JudgeClient, rubric: Rubric, labels_path: Path | str) -> d
             results[criterion.id] = CriterionCalibration(agreement=0.0, kappa=0.0, n=0)
             continue
         agreement = sum(1 for h, j in zip(human, judged) if h == j) / len(human)
-        kappa = cohen_kappa_score(human, judged, replace_undefined_by=0.0)
+        # `replace_undefined_by` (sklearn's own equivalent) only exists from
+        # scikit-learn 1.9, which itself requires Python >=3.11 -- pinning to
+        # it would silently make graphtrace's own real floor 3.11, not the
+        # >=3.10 pyproject.toml claims (confirmed by hand: Python 3.10's CI
+        # job resolves scikit-learn 1.7.2, which raises TypeError on this
+        # kwarg). Substituting the same fallback by hand instead keeps
+        # identical behavior across every scikit-learn version this project
+        # actually supports.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=UndefinedMetricWarning)
+            kappa = cohen_kappa_score(human, judged)
+        if math.isnan(kappa):
+            kappa = 0.0
         results[criterion.id] = CriterionCalibration(agreement=agreement, kappa=float(kappa), n=len(human))
     return results
