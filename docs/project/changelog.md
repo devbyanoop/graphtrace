@@ -27,6 +27,15 @@ Deliberately not attempted: a trend view across multiple runs. That needs its ow
 
 25 new tests (`test_report.py`), 3 new (`test_plugin.py`, the marker itself via `pytester`). 199 tests pass, full regression.
 
+### Fixed (2026-10-27) -- a second real external app, [`langchain-ai/deepagents`](https://github.com/langchain-ai/deepagents) (~30.6k stars)
+
+A different way of using a subgraph than `langgraph-swarm-py`'s: the sub-agent here is invoked *from inside* a plain tool function (`task`), not added as a graph node. Kept as a permanent regression test, `tests/test_deepagents_compat.py` (gated with `pytest.importorskip`, `deepagents` added as a second `dev`-extra compatibility dependency).
+
+- **`ToolRuntime` carries the entire live Pregel execution state as its `config` field** (per-run object ids, open file/thread handles, `functools.partial`s) -- made the recorded cassette entry for the *exact same logical call* hash differently across two separate processes, and bloated the cassette into something unreadable. A related bug found one step later, generating a report from this exact test: the same raw dump was landing in the in-memory `Trajectory` itself (`ToolCall.args`), since only the copy passed to the cassette writer had been sanitized, not the object the report (and anything else) reads directly. Fixed in both places: `_yaml_safe()` now recognizes `ToolRuntime` (lazily imported, never a hard dependency), keeping only `state` and `tool_call_id`.
+- **Documented, not patched around**: a tool whose own implementation triggers a nested LangGraph execution loses that nested execution's step-by-step visibility in replay mode, since replaying the tool call means its real body -- including its own `compiled_subagent.invoke(...)` call -- never executes. The parent's real-world outcome is identical either way; only the fine-grained trace of *how* the sub-agent got there is unrecoverable from a cassette. A real fix would mean recursively intercepting calls made from inside an already-intercepted call -- a genuinely different, larger feature, not a quick correction. Confirmed with a real assertion (record mode sees the nested step, replay mode doesn't, both reach the same final message), not left as prose that could go stale.
+
+201 tests pass, full regression.
+
 ## [0.1.0] - 2026-10-26
 
 v0.1's full scope: the framework-agnostic `Trajectory` model and 12-function assertion API, the real LangGraph recording layer (including subgraphs), record/replay cassettes, a pinned-model judge contract with calibration, trace-to-test from a production export (Langfuse/OTel/LangSmith), a static HTML report, a real `graphtrace` CLI, and CI — 179 tests pass, full regression. Verified against real upstream sources throughout (a real live Groq model, the real `openinference-semantic-conventions` source, a real wheel build in a genuinely isolated clean venv), not just mocks and hand-built fixtures. Everything that follows, down to the next version header, was built and verified before this release.

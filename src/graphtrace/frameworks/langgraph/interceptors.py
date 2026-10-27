@@ -107,16 +107,54 @@ from graphtrace.replay.engine import resolve_call
 _MESSAGE_CLASSES_BY_TYPE: dict[str, type[BaseMessage]] = {"human": HumanMessage, "ai": AIMessage, "tool": ToolMessage, "system": SystemMessage}
 
 
+def _tool_runtime_type() -> type | None:
+    """`ToolRuntime` (LangChain's dependency-injection object, given to a tool
+    that declares a `runtime: ToolRuntime` parameter) lives in the full
+    `langchain` package, not `langchain-core` -- lazily imported here, the
+    same pattern `judge/client.py` uses for `litellm`, so recognizing it
+    never becomes a hard dependency graphtrace imposes on every install.
+    `None` when `langchain` isn't installed at all; the `isinstance` check in
+    `_yaml_safe` below is simply skipped in that case, falling through to the
+    same `str()` fallback as any other unrecognized object.
+    """
+    try:
+        from langchain.tools import ToolRuntime
+    except ImportError:
+        return None
+    return ToolRuntime
+
+
 def _yaml_safe(value: Any) -> Any:
     """Recursively convert a real tool call's args or result into something
     `ruamel.yaml` can actually write -- see this module's own docstring for
-    the real cases (nested `BaseMessage`s, a `Command`) that made this
-    necessary. Dict/list recurse; a message or `Command` gets a `_type`-
-    tagged dict `_restore_value` below can reverse; anything else already
+    the real cases (nested `BaseMessage`s, a `Command`, a `ToolRuntime`) that
+    made this necessary. Dict/list recurse; a message/`Command`/`ToolRuntime`
+    gets a `_type`-tagged dict `_restore_value` below can reverse (except
+    `ToolRuntime`, deliberately -- see its own branch); anything else already
     YAML-safe passes through; anything still unrecognized falls back to
     `str()` -- a readable cassette entry, never a crash, and never a value
     `_restore_value` will try (and fail) to reconstruct as something it isn't.
     """
+    runtime_cls = _tool_runtime_type()
+    if runtime_cls is not None and isinstance(value, runtime_cls):
+        # Confirmed against a real tool receiving one (deepagents' own `task`
+        # tool): `ToolRuntime.config` alone nests the entire live Pregel
+        # execution state -- per-run object ids, open file/thread handles,
+        # `functools.partial`s -- none of it YAML-safe, all of it different
+        # on every single run even for the exact same logical call, which
+        # made the recorded request non-deterministic across record/replay
+        # (a real, reproduced failure: the same scripted call hashed
+        # differently between two separate runs) on top of bloating the
+        # cassette into something unreadable. Only `state` (the actual
+        # conversation/graph state -- the one part a human reading this
+        # cassette could plausibly care about) and `tool_call_id` are kept;
+        # `config`/`store`/`stream_writer`/`tools`/`execution_info`/
+        # `server_info` are pure internal plumbing, never meaningful for
+        # deciding whether two calls are "the same" one. Deliberately not
+        # given a `_restore_value` counterpart: a tool's real *result* never
+        # legitimately contains a `ToolRuntime` (it's injected into a tool,
+        # never returned by one), so there is nothing to reconstruct on replay.
+        return {"_type": "ToolRuntime", "state": _yaml_safe(value.state), "tool_call_id": value.tool_call_id}
     if isinstance(value, BaseMessage):
         data: dict[str, Any] = {"_type": "Message", "type": value.type, "content": value.content}
         if value.name:
@@ -423,7 +461,20 @@ def _record_tool_call(tool: BaseTool, input, config, *, result: Any, error: str 
         ToolCall(
             node=metadata.get("langgraph_node", "?"),
             name=tool.name,
-            args=args,
+            # _yaml_safe, not raw args -- found testing against deepagents:
+            # the *in-memory* ToolCall.args (read directly by report/html.py's
+            # technical detail, and by anything else inspecting a Trajectory
+            # after the fact) had the exact same giant, non-deterministic
+            # ToolRuntime dump the cassette fix addressed, since only what
+            # got passed to resolve_call was ever sanitized -- this object
+            # itself never was. Plain args (the overwhelming common case,
+            # {"order_id": "1234"}-shaped) pass through _yaml_safe completely
+            # unchanged, so assert_tool_called(..., args_match={...}) against
+            # ordinary values keeps working identically; only matching
+            # against a raw BaseMessage/Command/ToolRuntime object specifically
+            # would now see its sanitized dict form instead -- a real trade-off,
+            # accepted deliberately rather than leave the report broken.
+            args=_yaml_safe(args),
             result=result,
             error=error,
             latency_s=latency_s,
