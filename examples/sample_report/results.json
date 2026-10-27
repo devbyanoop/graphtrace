@@ -24,7 +24,7 @@
       },
       "final_message": null,
       "cost_usd": 0.0,
-      "latency_s": 0.01142869982868433,
+      "latency_s": 0.005491399904713035,
       "tokens_total": 0,
       "steps": [
         {
@@ -32,7 +32,7 @@
           "node": "router",
           "kind": "node",
           "namespace": [],
-          "latency_s": 0.006643899949267507,
+          "latency_s": 0.0032916999189183116,
           "state_diff": {
             "intent": "refund"
           },
@@ -42,7 +42,7 @@
               "model": "GenericFakeChatModel",
               "prompt_tokens": 0,
               "completion_tokens": 0,
-              "latency_s": 0.004789499915204942,
+              "latency_s": 0.0023911999305710196,
               "cost_usd": 0.0,
               "output": {
                 "content": "Yes, $129.00 has been refunded to your original payment method.",
@@ -57,7 +57,7 @@
           "node": "lookup_order",
           "kind": "node",
           "namespace": [],
-          "latency_s": 0.0026450000004842877,
+          "latency_s": 0.0012212999863550067,
           "state_diff": {
             "order": {
               "status": "delivered",
@@ -78,7 +78,7 @@
                 "amount": 49.0
               },
               "error": null,
-              "latency_s": 0.0013421999756246805
+              "latency_s": 0.0006079999729990959
             }
           ]
         },
@@ -87,7 +87,7 @@
           "node": "human_approval",
           "kind": "node",
           "namespace": [],
-          "latency_s": 0.0012753999326378107,
+          "latency_s": 0.0005747999530285597,
           "state_diff": {
             "approved": true
           },
@@ -99,7 +99,7 @@
           "node": "refund",
           "kind": "node",
           "namespace": [],
-          "latency_s": 0.0008643999462947249,
+          "latency_s": 0.00040360004641115665,
           "state_diff": {
             "refunded": true
           },
@@ -115,16 +115,19 @@
         "criteria": {
           "confirms_amount": {
             "pass": true,
-            "reason": "The response includes the specific refund amount of $129.00."
+            "reason": "The reply includes the exact refund amount $129.00."
           },
           "no_promises": {
             "pass": true,
-            "reason": "The response does not mention any delivery or processing timeline."
+            "reason": "The reply does not mention any delivery or processing timeline."
           }
         },
         "passed": true
       }
-    ]
+    ],
+    "description": "A customer with a valid order is refunded, with the amount stated and no delivery promise made.",
+    "severity": "normal",
+    "category": "happy_path"
   },
   {
     "test_id": "test_refund_rejected_by_human",
@@ -151,7 +154,7 @@
       },
       "final_message": null,
       "cost_usd": 0.0,
-      "latency_s": 0.00862890004646033,
+      "latency_s": 0.004207400023005903,
       "tokens_total": 0,
       "steps": [
         {
@@ -159,7 +162,7 @@
           "node": "router",
           "kind": "node",
           "namespace": [],
-          "latency_s": 0.0034316000528633595,
+          "latency_s": 0.0017313999123871326,
           "state_diff": {
             "intent": "refund"
           },
@@ -169,7 +172,7 @@
               "model": "GenericFakeChatModel",
               "prompt_tokens": 0,
               "completion_tokens": 0,
-              "latency_s": 0.002306499984115362,
+              "latency_s": 0.0011594000970944762,
               "cost_usd": 0.0,
               "output": {
                 "content": "Yes, $129.00 has been refunded to your original payment method.",
@@ -184,7 +187,7 @@
           "node": "lookup_order",
           "kind": "node",
           "namespace": [],
-          "latency_s": 0.002354700001887977,
+          "latency_s": 0.0011996000539511442,
           "state_diff": {
             "order": {
               "status": "delivered",
@@ -205,7 +208,7 @@
                 "amount": 49.0
               },
               "error": null,
-              "latency_s": 0.00120900000911206
+              "latency_s": 0.0005725000519305468
             }
           ]
         },
@@ -214,7 +217,7 @@
           "node": "human_approval",
           "kind": "node",
           "namespace": [],
-          "latency_s": 0.0021102000027894974,
+          "latency_s": 0.0009658000199124217,
           "state_diff": {
             "approved": false
           },
@@ -226,7 +229,7 @@
           "node": "give_up",
           "kind": "node",
           "namespace": [],
-          "latency_s": 0.0007323999889194965,
+          "latency_s": 0.0003106000367552042,
           "state_diff": {
             "refunded": false
           },
@@ -236,7 +239,10 @@
       ]
     },
     "error_message": null,
-    "judge_verdicts": []
+    "judge_verdicts": [],
+    "description": "A refund the human approver rejects is never issued.",
+    "severity": "normal",
+    "category": "safety"
   },
   {
     "test_id": "test_refund_budget_regression",
@@ -263,7 +269,7 @@
       },
       "final_message": null,
       "cost_usd": 0.0,
-      "latency_s": 0.009811999974772334,
+      "latency_s": 0.003994000027887523,
       "tokens_total": 0,
       "steps": [
         {
@@ -271,7 +277,7 @@
           "node": "router",
           "kind": "node",
           "namespace": [],
-          "latency_s": 0.0033535000402480364,
+          "latency_s": 0.0015591999981552362,
           "state_diff": {
             "intent": "refund"
           },
@@ -281,7 +287,7 @@
               "model": "GenericFakeChatModel",
               "prompt_tokens": 0,
               "completion_tokens": 0,
-              "latency_s": 0.002314800047315657,
+              "latency_s": 0.0010948999552056193,
               "cost_usd": 0.0,
               "output": {
                 "content": "Yes, $129.00 has been refunded to your original payment method.",
@@ -296,7 +302,7 @@
           "node": "lookup_order",
           "kind": "node",
           "namespace": [],
-          "latency_s": 0.0036143000470474362,
+          "latency_s": 0.0011047000298276544,
           "state_diff": {
             "order": {
               "status": "delivered",
@@ -317,7 +323,7 @@
                 "amount": 49.0
               },
               "error": null,
-              "latency_s": 0.0019478000467643142
+              "latency_s": 0.0005649999948218465
             }
           ]
         },
@@ -326,7 +332,7 @@
           "node": "human_approval",
           "kind": "node",
           "namespace": [],
-          "latency_s": 0.00217179988976568,
+          "latency_s": 0.0010504999663680792,
           "state_diff": {
             "approved": true
           },
@@ -338,7 +344,7 @@
           "node": "refund",
           "kind": "node",
           "namespace": [],
-          "latency_s": 0.0006723999977111816,
+          "latency_s": 0.0002796000335365534,
           "state_diff": {
             "refunded": true
           },
@@ -348,6 +354,9 @@
       ]
     },
     "error_message": "expected final_state['refunded'] == False, got True",
-    "judge_verdicts": []
+    "judge_verdicts": [],
+    "description": "Deliberately wrong on purpose, to show what a real blocking failure looks like in this sample.",
+    "severity": "critical",
+    "category": "safety"
   }
 ]

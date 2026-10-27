@@ -6,7 +6,7 @@
 
 A LangGraph agent with branches, retries, and tool calls can look fine on a lucky run while silently changing *how* it got there — a node path that changed, a retry now firing on every call, a tool call that quietly stopped happening, an approval gate the agent learned to route around. Checking only the final answer text can't catch any of that, because the final answer can still look right while the path that produced it is wrong, expensive, or unsafe. graphtrace records the full trajectory of a run — every node, every state change, every tool/LLM call — and makes that path a first-class, assertable thing, with record/replay cassettes so a CI run never has to make a real, billed LLM call to pass.
 
-It's a complete v0.1: the trajectory model and a 12-function assertion API, real LangGraph recording (including subgraphs), record/replay, an LLM-as-judge contract with calibration, a CLI that turns a production trace export into a generated test, a static HTML report, and CI — 181 tests pass today (three more real bugs found and fixed since, validating against a real external app -- see the roadmap).
+It's a complete v0.1: the trajectory model and a 12-function assertion API, real LangGraph recording (including subgraphs), record/replay, an LLM-as-judge contract with calibration, a CLI that turns a production trace export into a generated test, a static HTML report, and CI — 199 tests pass today (three more real bugs found testing against a real external app, plus an executive summary layer for the report -- see the roadmap).
 
 ## What this case study is actually about
 

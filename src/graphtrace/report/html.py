@@ -15,7 +15,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
-from graphtrace.report.results import TestResult
+from graphtrace.report.results import TestResult, build_executive_summary
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
@@ -34,4 +34,4 @@ def _summarize(results: list[TestResult]) -> dict[str, float | int]:
 def render_report(results: list[TestResult], *, title: str = "graphtrace report") -> str:
     env = Environment(loader=FileSystemLoader(_TEMPLATES_DIR), autoescape=True)
     template = env.get_template("report.html.j2")
-    return template.render(title=title, results=results, summary=_summarize(results))
+    return template.render(title=title, results=results, summary=_summarize(results), exec_summary=build_executive_summary(results))

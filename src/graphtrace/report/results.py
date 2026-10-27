@@ -18,6 +18,13 @@ from typing import Any, Literal
 from graphtrace.core.trajectory import Trajectory
 
 Outcome = Literal["passed", "failed", "error"]
+Severity = Literal["critical", "high", "normal", "low"]
+
+# Lower index = more severe = sorted first in the executive summary's blocking-
+# issues list. "normal" is the default for any test that never opted into the
+# @pytest.mark.graphtrace(...) marker at all -- untagged tests still show up,
+# just without the extra emphasis a tagged "critical" one gets.
+SEVERITY_ORDER: tuple[Severity, ...] = ("critical", "high", "normal", "low")
 
 
 def _jsonsafe(value: Any) -> Any:
@@ -108,6 +115,17 @@ class TestResult:
     `dataclasses.asdict(GradeResult(...))` (`judge/client.py`) -- that
     dataclass is already JSON-safe (str/dict/bool fields only), so there's no
     reason to wrap it in a second type here.
+
+    `description`/`severity`/`category` are optional, human-authored metadata
+    -- set via `@pytest.mark.graphtrace(description=..., severity=...,
+    category=...)` on the test itself (see `plugin.py`), not inferred from
+    the test's own assertion/error text. Graphtrace has no way to know on its
+    own that "refunded without approval" is more severe than "wording
+    changed" -- that's a judgment call only a human can make, and this is
+    where they record it. All three default to None/"normal" so an untagged
+    test still renders correctly, just without the extra emphasis a tagged
+    one gets; the report degrades gracefully rather than requiring universal
+    adoption before showing any value at all.
     """
 
     __test__ = False  # not a pytest test class -- the name just collides with its collection heuristic
@@ -117,6 +135,9 @@ class TestResult:
     trajectory: dict[str, Any] | None = None
     error_message: str | None = None
     judge_verdicts: list[dict[str, Any]] = field(default_factory=list)
+    description: str | None = None
+    severity: Severity = "normal"
+    category: str | None = None
 
     @classmethod
     def from_trajectory(
@@ -127,6 +148,9 @@ class TestResult:
         *,
         error_message: str | None = None,
         judge_verdicts: list[dict[str, Any]] | None = None,
+        description: str | None = None,
+        severity: Severity = "normal",
+        category: str | None = None,
     ) -> "TestResult":
         return cls(
             test_id=test_id,
@@ -134,7 +158,49 @@ class TestResult:
             trajectory=trajectory_to_dict(traj) if traj is not None else None,
             error_message=error_message,
             judge_verdicts=judge_verdicts or [],
+            description=description,
+            severity=severity,
+            category=category,
         )
+
+
+def build_executive_summary(results: list[TestResult]) -> dict[str, Any]:
+    """The release-readiness view a QA lead, manager, consultant, or auditor
+    actually needs -- a verdict, blocking issues ranked by severity (most
+    severe first), and a coverage breakdown by category -- without reading a
+    single trajectory. This is computed data, not markup, so it's testable
+    on its own and reusable if graphtrace ever grows a second report format.
+
+    Degrades gracefully when no test used the `graphtrace` marker
+    (plugin.py) at all: `ready`/the blocking list only ever need `outcome`,
+    which every result always has, so they're always meaningful. `categories`
+    is empty and `has_categories` is False when nothing was tagged -- the
+    report says so honestly instead of fabricating a coverage breakdown from
+    nothing.
+
+    Any failed/errored test is "blocking" regardless of its severity tag --
+    severity controls *ranking and visual emphasis* among real failures, not
+    whether a failure counts. Graphtrace has no basis to decide a failure is
+    "safe to ship anyway"; that stays a human call the report surfaces
+    clearly, never one the report makes for them.
+    """
+    blocking = [r for r in results if r.outcome in ("failed", "error")]
+    blocking_sorted = sorted(
+        blocking,
+        key=lambda r: SEVERITY_ORDER.index(r.severity) if r.severity in SEVERITY_ORDER else SEVERITY_ORDER.index("normal"),
+    )
+
+    categories: dict[str, int] = {}
+    for result in results:
+        if result.category:
+            categories[result.category] = categories.get(result.category, 0) + 1
+
+    return {
+        "ready": len(blocking) == 0,
+        "blocking": blocking_sorted,
+        "categories": categories,
+        "has_categories": bool(categories),
+    }
 
 
 def save_results(results: list[TestResult], path: str | Path) -> None:

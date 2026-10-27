@@ -18,6 +18,7 @@ since this module loads for all of them via the entry point above).
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -52,6 +53,23 @@ def pytest_configure(config: pytest.Config) -> None:
     # (e.g. this project's own pytester-based plugin tests), since this module is
     # only ever imported once per process.
     config._graphtrace_results = []  # type: ignore[attr-defined]
+    # Registered here (not just documented) so using it never prints pytest's
+    # own "Unknown marker" warning -- a test author's first use of this should
+    # work cleanly, not look like a typo.
+    config.addinivalue_line(
+        "markers",
+        "graphtrace(description=None, severity='normal', category=None): "
+        "report metadata for the executive summary (report/results.py's "
+        "build_executive_summary) -- a plain-language description of the "
+        "scenario, a severity for ranking it among real failures, and a "
+        "category for the coverage breakdown. All optional; an untagged "
+        "test still reports correctly, just without the extra emphasis.",
+    )
+
+
+def _graphtrace_marker_kwargs(item: pytest.Item) -> dict[str, Any]:
+    marker = item.get_closest_marker("graphtrace")
+    return dict(marker.kwargs) if marker else {}
 
 
 @pytest.hookimpl(wrapper=True)
@@ -59,16 +77,17 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo) -> pytes
     report = yield
     results: list[TestResult] | None = getattr(item.config, "_graphtrace_results", None)
     if results is not None:
+        marker_kwargs = _graphtrace_marker_kwargs(item)
         if report.when == "call" and not report.skipped:
             traj = getattr(item, "_graphtrace_last_trajectory", None)
             outcome = "passed" if report.passed else "failed"
             error_message = str(report.longrepr) if not report.passed else None
-            results.append(TestResult.from_trajectory(item.nodeid, outcome, traj, error_message=error_message))
+            results.append(TestResult.from_trajectory(item.nodeid, outcome, traj, error_message=error_message, **marker_kwargs))
         elif report.when == "setup" and report.failed:
             # The test body never ran at all (a fixture blew up) -- pytest's own
             # JUnit-XML convention calls this "error", distinct from a "failed"
             # assertion inside the test, and there's no Trajectory to attach.
-            results.append(TestResult(test_id=item.nodeid, outcome="error", error_message=str(report.longrepr)))
+            results.append(TestResult(test_id=item.nodeid, outcome="error", error_message=str(report.longrepr), **marker_kwargs))
     return report
 
 

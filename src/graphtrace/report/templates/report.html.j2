@@ -20,10 +20,67 @@
   .step { margin: 0.35rem 0 0.35rem 0.5rem; padding: 0.4rem 0.7rem; border-left: 3px solid #ccc; }
   .call { margin: 0.25rem 0 0.25rem 1rem; font-size: 0.9em; color: #333; }
   pre { white-space: pre-wrap; word-break: break-word; background: #f7f7f7; padding: 0.5rem; border-radius: 4px; margin: 0.25rem 0; }
+
+  /* Executive summary -- for a QA lead / manager / consultant / auditor
+     deciding go/no-go, not for an engineer debugging a trajectory. */
+  .exec-summary { border: 1px solid #ddd; border-radius: 10px; padding: 1.25rem 1.5rem; margin-bottom: 2rem; }
+  .release-verdict { font-size: 1.3em; font-weight: 700; padding: 0.6rem 1rem; border-radius: 8px; margin-bottom: 1rem; display: inline-block; }
+  .release-verdict.ready { background: #e7f6ec; color: #146c2e; border: 1px solid #a9dfba; }
+  .release-verdict.not-ready { background: #fde8e6; color: #92251a; border: 1px solid #f3b3ab; }
+  .blocking-list { list-style: none; padding: 0; margin: 0.5rem 0 1rem 0; }
+  .blocking-list li { padding: 0.5rem 0.75rem; margin-bottom: 0.4rem; border-radius: 6px; background: #fff5f4; border-left: 4px solid #b42318; }
+  .blocking-list li.severity-critical { border-left-color: #92251a; background: #fde8e6; }
+  .blocking-list li.severity-high { border-left-color: #b45309; background: #fff7ed; }
+  .blocking-list li.severity-normal { border-left-color: #b42318; }
+  .blocking-list li.severity-low { border-left-color: #9ca3af; background: #f9fafb; }
+  .severity-badge { display: inline-block; font-size: 0.75em; font-weight: 700; text-transform: uppercase; padding: 0.1rem 0.5rem; border-radius: 4px; margin-right: 0.5rem; color: #fff; }
+  .severity-badge.severity-critical { background: #92251a; }
+  .severity-badge.severity-high { background: #b45309; }
+  .severity-badge.severity-normal { background: #4b5563; }
+  .severity-badge.severity-low { background: #9ca3af; }
+  .category-badge { display: inline-block; font-size: 0.8em; background: #eef2ff; color: #3730a3; padding: 0.1rem 0.5rem; border-radius: 4px; margin-left: 0.5rem; }
+  .coverage-list { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0; }
+  .coverage-list span { background: #f1f1f1; padding: 0.3rem 0.7rem; border-radius: 6px; font-size: 0.9em; }
+  .no-coverage { color: #6b7280; font-style: italic; font-size: 0.9em; }
+  .jump-link { font-size: 0.85em; }
+  details.technical-detail { margin-top: 2rem; }
+  details.technical-detail > summary { cursor: pointer; font-weight: 600; font-size: 1.1em; margin-bottom: 1rem; }
 </style>
 </head>
 <body>
 <h1>{{ title }}</h1>
+
+<div class="exec-summary">
+  <div class="release-verdict {{ 'ready' if exec_summary.ready else 'not-ready' }}">
+    {% if exec_summary.ready %}READY{% else %}NOT READY &mdash; {{ exec_summary.blocking|length }} blocking issue{{ "s" if exec_summary.blocking|length != 1 else "" }}{% endif %}
+  </div>
+
+  {% if exec_summary.blocking %}
+  <h3>Blocking issues</h3>
+  <ul class="blocking-list">
+    {% for result in exec_summary.blocking %}
+    <li class="severity-{{ result.severity }}">
+      <span class="severity-badge severity-{{ result.severity }}">{{ result.severity }}</span>
+      {{ result.description or result.test_id }}
+      {% if result.category %}<span class="category-badge">{{ result.category }}</span>{% endif %}
+      &mdash; <a class="jump-link" href="#detail-{{ results.index(result) }}">see technical detail</a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <h3>Coverage</h3>
+  {% if exec_summary.has_categories %}
+  <div class="coverage-list">
+    {% for category, count in exec_summary.categories.items() %}
+    <span>{{ category }} ({{ count }})</span>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="no-coverage">No scenario categories were tagged on any test (see <code>@pytest.mark.graphtrace(category=...)</code> in the Report &amp; CI guide) &mdash; coverage breakdown unavailable.</p>
+  {% endif %}
+</div>
+
 <div class="summary">
   <div>{{ summary.total }} tests</div>
   <div class="passed">{{ summary.passed }} passed</div>
@@ -33,9 +90,15 @@
   <div>{{ "%.2f"|format(summary.total_latency_s) }}s total latency</div>
 </div>
 
+<details class="technical-detail">
+<summary>Technical detail (per-test trajectories, for debugging a failure)</summary>
 {% for result in results %}
-<div class="test {{ result.outcome }}">
+<div class="test {{ result.outcome }}" id="detail-{{ loop.index0 }}">
   <h2>{{ result.test_id }} &mdash; <span class="verdict {{ 'pass' if result.outcome == 'passed' else 'fail' }}">{{ result.outcome }}</span></h2>
+
+  {% if result.description %}
+  <p><em>{{ result.description }}</em>{% if result.category %} <span class="category-badge">{{ result.category }}</span>{% endif %}</p>
+  {% endif %}
 
   {% if result.error_message %}
   <pre class="error">{{ result.error_message }}</pre>
@@ -95,5 +158,6 @@
   {% endif %}
 </div>
 {% endfor %}
+</details>
 </body>
 </html>

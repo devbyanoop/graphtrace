@@ -98,6 +98,22 @@ Everything above was verified against this project's own demo agent, hand-writte
 
 **181 tests pass today.** A real HTML report from this run (`graphtrace report`, both tests, record and replay, the real `Command`/handoff mechanics visible in the trajectory tree) was generated and shared directly, not just described.
 
+## Executive summary for the HTML report (2026-10-27)
+
+Shown the real HTML report, the honest answer to "who reads this" was: an engineer debugging a failed test, full stop — raw Python reprs, internal jargon (`subgraph_enter`, `node='?'`), stack-trace-style error strings. Nothing in it served a QA lead, a manager, a consultant, or an auditor deciding go/no-go, even though those are exactly the roles a release-readiness report needs to serve.
+
+Added a layer *above* the existing trajectory detail, not a replacement for it:
+
+- **`@pytest.mark.graphtrace(description=..., severity=..., category=...)`** — optional, human-authored metadata a test author attaches directly to a test. Graphtrace has no way to know on its own that "refunded without approval" is more severe than "wording changed slightly" — that's a judgment call only a human can make, and this is where it's recorded. All three default cleanly (`severity` to `"normal"`, the others to `None`) so an untagged test still reports correctly; adopting this is additive, never required first.
+- **A release verdict** — **READY** or **NOT READY, N blocking issues** — computed from plain pass/fail, always meaningful regardless of whether anything was tagged.
+- **Blocking issues, ranked by severity** (critical first), each showing its plain-language description (or the bare test id, honestly, if none was given) and its category, linking down to the existing technical detail for whoever needs to debug it. Severity never decides *whether* a failure blocks — only how it's ranked and emphasized among real ones; graphtrace never gets to decide a failure is "safe to ship anyway."
+- **A coverage breakdown** by category — what was actually tested, not just how many things passed. Says so honestly (`coverage breakdown unavailable`) when nothing was tagged, rather than fabricating one from test names.
+- The existing per-test trajectory tree, judge verdicts, and raw calls are unchanged, just moved under a collapsed `<details>` disclosure — still there for an engineer, no longer the first (or only) thing anyone sees.
+
+**Deliberately not attempted**: a trend view across multiple runs ("better or worse than last time"). That needs a separate persistence design (where history lives, how many runs to keep, per-branch or not) that wasn't designed, let alone built, here — flagged honestly rather than half-built.
+
+`examples/sample_report/` regenerated to actually demonstrate this (real descriptions/severities/categories on all three sample results, not the bare-test-id fallback). **199 tests pass today.**
+
 ## v0.2 — not started, not scheduled for v0.1
 
 Four pieces, all building on the already-shipped core rather than needing new infrastructure: the security test pack ([scope](../guide/security-test-pack.md)), observability export ([scope](../guide/observability-export.md)), [cut-point replay](../guide/cut-point-replay.md) (adopted from Chronicle, Microsoft, arXiv 2609.20625 — replay a recorded incident up to where it broke, then run the fix live from there), and statistical live-mode verification (adopted from AgentAssay, arXiv 2603.02601 — a Wilson-interval Pass/Fail/Inconclusive verdict across N real trials, so a single flaky nightly run stops being the whole story; see [Recording & replay](../guide/recording-and-replay.md#statistical-live-mode-verification-v02)).

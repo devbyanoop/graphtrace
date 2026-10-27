@@ -14,6 +14,19 @@ All notable changes to graphtrace are recorded here, following [Keep a Changelog
 
 181 tests pass, full regression.
 
+### Added (2026-10-27) -- an executive summary layer for the HTML report
+
+Asked directly who actually reads the HTML report besides an engineer debugging a failure -- the honest answer was nobody, since it was raw trajectory dumps, internal jargon, and stack-trace-style error strings throughout. Added a layer above the existing detail, not a replacement for it:
+
+- `@pytest.mark.graphtrace(description=None, severity='normal', category=None)` -- optional per-test metadata, registered in `plugin.py` so using it never triggers pytest's own "unknown marker" warning. `report/results.py`'s `TestResult` gained matching `description`/`severity`/`category` fields.
+- `report/results.py::build_executive_summary()` -- a release verdict (`ready` iff nothing failed/errored), blocking issues sorted by severity (critical first; any failure blocks regardless of severity -- severity only ranks among real failures, graphtrace never decides one is "safe to ship anyway"), and a category coverage breakdown that honestly says `coverage breakdown unavailable` rather than fabricating one when nothing was tagged.
+- `report/templates/report.html.j2` restructured: the verdict, blocking-issues list, and coverage breakdown render first and are always visible; the existing per-test trajectory tree, judge verdicts, and raw calls moved under a collapsed `<details>` disclosure below.
+- `examples/sample_report/` regenerated with real descriptions/severities/categories on all three sample results, so the portfolio artifact demonstrates this rather than falling back to bare test ids.
+
+Deliberately not attempted: a trend view across multiple runs. That needs its own persistence design (where run history lives, how many runs to keep, per-branch or not) that hasn't been designed, let alone built.
+
+25 new tests (`test_report.py`), 3 new (`test_plugin.py`, the marker itself via `pytester`). 199 tests pass, full regression.
+
 ## [0.1.0] - 2026-10-26
 
 v0.1's full scope: the framework-agnostic `Trajectory` model and 12-function assertion API, the real LangGraph recording layer (including subgraphs), record/replay cassettes, a pinned-model judge contract with calibration, trace-to-test from a production export (Langfuse/OTel/LangSmith), a static HTML report, a real `graphtrace` CLI, and CI — 179 tests pass, full regression. Verified against real upstream sources throughout (a real live Groq model, the real `openinference-semantic-conventions` source, a real wheel build in a genuinely isolated clean venv), not just mocks and hand-built fixtures. Everything that follows, down to the next version header, was built and verified before this release.

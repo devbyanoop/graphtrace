@@ -19,7 +19,7 @@ from refund_agent.graph import build_refund_graph
 from graphtrace import run_graph
 from graphtrace.core.trajectory import LLMCall, Step, ToolCall, Trajectory
 from graphtrace.report.html import render_report
-from graphtrace.report.results import TestResult, load_results, save_results, trajectory_to_dict
+from graphtrace.report.results import TestResult, build_executive_summary, load_results, save_results, trajectory_to_dict
 
 
 def _fake_model() -> GenericFakeChatModel:
@@ -153,3 +153,128 @@ def test_render_report_escapes_a_script_tag_in_an_error_message():
     html = render_report([result])
     assert "<script>alert" not in html
     assert "&lt;script&gt;alert" in html
+
+
+# -- results.py: build_executive_summary -- the go/no-go view ------------------------------
+
+def test_build_executive_summary_is_ready_when_nothing_failed():
+    results = [TestResult(test_id="test_a", outcome="passed"), TestResult(test_id="test_b", outcome="passed")]
+    summary = build_executive_summary(results)
+    assert summary["ready"] is True
+    assert summary["blocking"] == []
+
+
+def test_build_executive_summary_is_not_ready_when_anything_failed_or_errored():
+    results = [TestResult(test_id="test_a", outcome="passed"), TestResult(test_id="test_b", outcome="failed"), TestResult(test_id="test_c", outcome="error")]
+    summary = build_executive_summary(results)
+    assert summary["ready"] is False
+    assert {r.test_id for r in summary["blocking"]} == {"test_b", "test_c"}
+
+
+def test_build_executive_summary_sorts_blocking_issues_by_severity_most_severe_first():
+    results = [
+        TestResult(test_id="test_low", outcome="failed", severity="low"),
+        TestResult(test_id="test_critical", outcome="failed", severity="critical"),
+        TestResult(test_id="test_untagged", outcome="failed"),  # defaults to "normal"
+        TestResult(test_id="test_high", outcome="failed", severity="high"),
+    ]
+    summary = build_executive_summary(results)
+    assert [r.test_id for r in summary["blocking"]] == ["test_critical", "test_high", "test_untagged", "test_low"]
+
+
+def test_build_executive_summary_treats_any_failure_as_blocking_regardless_of_severity():
+    """graphtrace has no basis to decide a failure is "safe to ship anyway" --
+    a "low" severity failure is still blocking, just ranked last among blockers."""
+    results = [TestResult(test_id="test_cosmetic", outcome="failed", severity="low")]
+    summary = build_executive_summary(results)
+    assert summary["ready"] is False
+    assert len(summary["blocking"]) == 1
+
+
+def test_build_executive_summary_aggregates_category_counts():
+    results = [
+        TestResult(test_id="test_a", outcome="passed", category="happy_path"),
+        TestResult(test_id="test_b", outcome="passed", category="happy_path"),
+        TestResult(test_id="test_c", outcome="failed", category="safety"),
+    ]
+    summary = build_executive_summary(results)
+    assert summary["categories"] == {"happy_path": 2, "safety": 1}
+    assert summary["has_categories"] is True
+
+
+def test_build_executive_summary_reports_no_categories_honestly_when_none_are_tagged():
+    """Must not fabricate a coverage breakdown from nothing -- say so instead."""
+    results = [TestResult(test_id="test_a", outcome="passed"), TestResult(test_id="test_b", outcome="passed")]
+    summary = build_executive_summary(results)
+    assert summary["categories"] == {}
+    assert summary["has_categories"] is False
+
+
+def test_build_executive_summary_handles_an_unrecognized_severity_value_gracefully():
+    """A hand-edited or foreign results.json could have a severity string
+    outside the known set -- must not crash, falls back to "normal" ranking."""
+    results = [
+        TestResult(test_id="test_weird", outcome="failed", severity="urgent"),  # not a real Severity value
+        TestResult(test_id="test_critical", outcome="failed", severity="critical"),
+    ]
+    summary = build_executive_summary(results)
+    assert [r.test_id for r in summary["blocking"]] == ["test_critical", "test_weird"]
+
+
+# -- html.py: the executive summary section, rendered --------------------------------------
+
+def test_render_report_shows_a_ready_verdict_with_no_blocking_issues():
+    html = render_report([TestResult(test_id="test_a", outcome="passed")])
+    assert "release-verdict ready" in html
+    assert "NOT READY" not in html
+
+
+def test_render_report_shows_a_not_ready_verdict_with_the_blocking_count():
+    html = render_report([TestResult(test_id="test_a", outcome="passed"), TestResult(test_id="test_b", outcome="failed"), TestResult(test_id="test_c", outcome="error")])
+    assert "release-verdict not-ready" in html
+    assert "NOT READY" in html
+    assert "2 blocking issues" in html
+
+
+def test_render_report_blocking_list_shows_description_severity_and_category():
+    result = TestResult(test_id="test_refund_requires_approval", outcome="failed", description="Customer should not be refunded without approval", severity="critical", category="safety")
+    html = render_report([result])
+    assert "Customer should not be refunded without approval" in html
+    assert 'severity-badge severity-critical">critical' in html
+    assert "safety" in html
+    # The raw test_id is NOT what a non-technical reader sees in the blocking
+    # list when a description was given -- confirmed by checking it only
+    # appears in the technical-detail section below, not duplicated in the summary.
+    assert html.index("Customer should not be refunded") < html.index("test_refund_requires_approval")
+
+
+def test_render_report_blocking_list_falls_back_to_test_id_without_a_description():
+    result = TestResult(test_id="test_untagged_failure", outcome="failed")
+    html = render_report([result])
+    assert "test_untagged_failure" in html
+
+
+def test_render_report_shows_a_no_coverage_note_when_nothing_is_categorized():
+    html = render_report([TestResult(test_id="test_a", outcome="passed")])
+    assert "coverage breakdown unavailable" in html
+
+
+def test_render_report_shows_coverage_breakdown_when_categories_are_tagged():
+    html = render_report([TestResult(test_id="test_a", outcome="passed", category="happy_path")])
+    assert "happy_path (1)" in html
+    assert "coverage breakdown unavailable" not in html
+
+
+def test_render_report_escapes_a_script_tag_in_description_and_category():
+    result = TestResult(test_id="test_xss3", outcome="failed", description="<script>alert(5)</script>", category="<script>alert(6)</script>")
+    html = render_report([result])
+    assert "<script>alert" not in html
+    assert "&lt;script&gt;alert" in html
+
+
+def test_render_report_technical_detail_is_collapsed_by_default():
+    """A non-technical reader shouldn't be confronted with raw trajectory
+    dumps -- confirmed the <details> wrapper has no `open` attribute."""
+    html = render_report([TestResult(test_id="test_a", outcome="passed")])
+    assert '<details class="technical-detail">' in html
+    assert "<details open" not in html

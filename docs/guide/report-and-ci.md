@@ -10,9 +10,34 @@ Every test that calls the `run_graph` fixture gets its real `Trajectory` attache
 
 ## What the report shows
 
+The report is laid out in two layers, for two different readers:
+
+- **Executive summary** (always visible, no detail hidden behind a click): a release verdict — **READY** or **NOT READY, N blocking issues** — a ranked list of blocking issues (most severe first), and a coverage breakdown by category. This is the layer a QA lead, manager, consultant, or auditor actually needs to make a go/no-go call, without reading a single trajectory. See [Executive summary metadata](#executive-summary-metadata-pytestmarkgraphtrace) below for how to feed it real descriptions, severities, and categories instead of raw test names.
+- **Technical detail** (collapsed by default, under a disclosure triangle): the same per-test trajectory tree this report has always had — every step's node, kind, latency, each LLM call (model, token counts, cost, output), each tool call (name, args, result or error), and judge verdicts with their reasons. This is the engineer's layer, for debugging *why* something failed once the summary says something needs attention.
 - **Summary row**: total/passed/failed/errored counts, total cost (USD) and total latency across every test.
-- **Per test**: outcome, the error message on failure, judge verdicts (pass/fail per criterion, with the judge's own stated reason), and the trajectory tree — every step's node, kind, latency, and each LLM call (model, token counts, cost, output) or tool call (name, args, result or error) inside it.
-- Rendered via Jinja2 with `autoescape=True`, passed explicitly and unconditionally — not inferred from the template's filename. Trajectory state, tool args/results, and an LLM's own output can all hold arbitrary client data (a user's refund note, a crafted prompt injection attempt...), the same XSS concern kbguard's own report has. Confirmed with a real test that a `<script>` tag anywhere in that data renders as escaped text, never live markup.
+- Rendered via Jinja2 with `autoescape=True`, passed explicitly and unconditionally — not inferred from the template's filename. Trajectory state, tool args/results, an LLM's own output, and now a test's own `description`/`category` can all hold arbitrary data (a user's refund note, a crafted prompt injection attempt...), the same XSS concern kbguard's own report has. Confirmed with real tests that a `<script>` tag anywhere in any of these renders as escaped text, never live markup.
+
+### Executive summary metadata: `@pytest.mark.graphtrace(...)`
+
+Without this, the blocking-issues list falls back to showing a bare `test_id` — technically accurate, meaningless to anyone who doesn't already know what that test checks. Tag a test to make its entry readable by someone who doesn't read code:
+
+```python
+@pytest.mark.graphtrace(
+    description="Customer should not be refunded without human approval",
+    severity="critical",  # "critical" | "high" | "normal" (default) | "low"
+    category="safety",    # any free-form string -- grouped into the coverage breakdown
+)
+def test_refund_requires_approval(run_graph):
+    ...
+```
+
+All three are optional, and the marker is registered (`plugin.py`'s `pytest_configure`) so using it never triggers pytest's own "unknown marker" warning. An untagged test still reports correctly — `severity` defaults to `"normal"`, `description`/`category` fall back to showing the bare test id — so adopting this is additive, not required before the report shows any value at all.
+
+**Severity never decides whether a failure blocks release** — only how it's *ranked and visually emphasized* among real failures. Graphtrace has no basis to decide a "low" severity failure is safe to ship anyway; that's a human call the report surfaces clearly (a red-bordered entry, last in the list) rather than one it ever makes for you. The verdict is simply: any failed or errored test means **NOT READY**, full stop.
+
+**Coverage** is the set of distinct `category` values seen across the whole run, with counts — a quick answer to "what did this actually test," not just "how many things passed." If nothing in the run was tagged with a category, the report says so honestly (`coverage breakdown unavailable`) instead of fabricating one from test names.
+
+**Not yet built, and worth knowing before expecting it**: a trend view across multiple runs ("better or worse than last time") would need a separate persistence design — where run history lives, how many runs to keep, whether it's per-branch — and isn't attempted here. Today's report is a single run's snapshot, full stop; comparing it to a previous one is still a manual, outside-the-report job.
 
 ## CI
 

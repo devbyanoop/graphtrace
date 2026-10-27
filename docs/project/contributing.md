@@ -17,7 +17,7 @@ Copy `.env.example` to `.env` and fill in a real provider key if you want `tests
 ## Running checks locally
 
 ```bash
-pytest                      # 181 tests, full regression
+pytest                      # 199 tests, full regression
 mkdocs build --strict       # this docs site, strict mode (pip install -e ".[docs]" first)
 ```
 

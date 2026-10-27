@@ -20,22 +20,85 @@
   .step { margin: 0.35rem 0 0.35rem 0.5rem; padding: 0.4rem 0.7rem; border-left: 3px solid #ccc; }
   .call { margin: 0.25rem 0 0.25rem 1rem; font-size: 0.9em; color: #333; }
   pre { white-space: pre-wrap; word-break: break-word; background: #f7f7f7; padding: 0.5rem; border-radius: 4px; margin: 0.25rem 0; }
+
+  /* Executive summary -- for a QA lead / manager / consultant / auditor
+     deciding go/no-go, not for an engineer debugging a trajectory. */
+  .exec-summary { border: 1px solid #ddd; border-radius: 10px; padding: 1.25rem 1.5rem; margin-bottom: 2rem; }
+  .release-verdict { font-size: 1.3em; font-weight: 700; padding: 0.6rem 1rem; border-radius: 8px; margin-bottom: 1rem; display: inline-block; }
+  .release-verdict.ready { background: #e7f6ec; color: #146c2e; border: 1px solid #a9dfba; }
+  .release-verdict.not-ready { background: #fde8e6; color: #92251a; border: 1px solid #f3b3ab; }
+  .blocking-list { list-style: none; padding: 0; margin: 0.5rem 0 1rem 0; }
+  .blocking-list li { padding: 0.5rem 0.75rem; margin-bottom: 0.4rem; border-radius: 6px; background: #fff5f4; border-left: 4px solid #b42318; }
+  .blocking-list li.severity-critical { border-left-color: #92251a; background: #fde8e6; }
+  .blocking-list li.severity-high { border-left-color: #b45309; background: #fff7ed; }
+  .blocking-list li.severity-normal { border-left-color: #b42318; }
+  .blocking-list li.severity-low { border-left-color: #9ca3af; background: #f9fafb; }
+  .severity-badge { display: inline-block; font-size: 0.75em; font-weight: 700; text-transform: uppercase; padding: 0.1rem 0.5rem; border-radius: 4px; margin-right: 0.5rem; color: #fff; }
+  .severity-badge.severity-critical { background: #92251a; }
+  .severity-badge.severity-high { background: #b45309; }
+  .severity-badge.severity-normal { background: #4b5563; }
+  .severity-badge.severity-low { background: #9ca3af; }
+  .category-badge { display: inline-block; font-size: 0.8em; background: #eef2ff; color: #3730a3; padding: 0.1rem 0.5rem; border-radius: 4px; margin-left: 0.5rem; }
+  .coverage-list { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0; }
+  .coverage-list span { background: #f1f1f1; padding: 0.3rem 0.7rem; border-radius: 6px; font-size: 0.9em; }
+  .no-coverage { color: #6b7280; font-style: italic; font-size: 0.9em; }
+  .jump-link { font-size: 0.85em; }
+  details.technical-detail { margin-top: 2rem; }
+  details.technical-detail > summary { cursor: pointer; font-weight: 600; font-size: 1.1em; margin-bottom: 1rem; }
 </style>
 </head>
 <body>
 <h1>graphtrace sample report</h1>
+
+<div class="exec-summary">
+  <div class="release-verdict not-ready">
+    NOT READY &mdash; 1 blocking issue
+  </div>
+
+  
+  <h3>Blocking issues</h3>
+  <ul class="blocking-list">
+    
+    <li class="severity-critical">
+      <span class="severity-badge severity-critical">critical</span>
+      Deliberately wrong on purpose, to show what a real blocking failure looks like in this sample.
+      <span class="category-badge">safety</span>
+      &mdash; <a class="jump-link" href="#detail-2">see technical detail</a>
+    </li>
+    
+  </ul>
+  
+
+  <h3>Coverage</h3>
+  
+  <div class="coverage-list">
+    
+    <span>happy_path (1)</span>
+    
+    <span>safety (2)</span>
+    
+  </div>
+  
+</div>
+
 <div class="summary">
   <div>3 tests</div>
   <div class="passed">2 passed</div>
   <div class="failed">1 failed</div>
   <div class="errored">0 errored</div>
   <div>$0.0000 total cost</div>
-  <div>0.03s total latency</div>
+  <div>0.01s total latency</div>
 </div>
 
+<details class="technical-detail">
+<summary>Technical detail (per-test trajectories, for debugging a failure)</summary>
 
-<div class="test passed">
+<div class="test passed" id="detail-0">
   <h2>test_refund_happy_path &mdash; <span class="verdict pass">passed</span></h2>
+
+  
+  <p><em>A customer with a valid order is refunded, with the amount stated and no delivery promise made.</em> <span class="category-badge">happy_path</span></p>
+  
 
   
 
@@ -47,9 +110,9 @@
       <span class="verdict pass">refund_reply: pass</span>
       <ul>
         
-        <li>confirms_amount: {&#39;pass&#39;: True, &#39;reason&#39;: &#39;The response includes the specific refund amount of $129.00.&#39;}</li>
+        <li>confirms_amount: {&#39;pass&#39;: True, &#39;reason&#39;: &#39;The reply includes the exact refund amount $129.00.&#39;}</li>
         
-        <li>no_promises: {&#39;pass&#39;: True, &#39;reason&#39;: &#39;The response does not mention any delivery or processing timeline.&#39;}</li>
+        <li>no_promises: {&#39;pass&#39;: True, &#39;reason&#39;: &#39;The reply does not mention any delivery or processing timeline.&#39;}</li>
         
       </ul>
     </li>
@@ -68,7 +131,7 @@
   <h3>Trajectory</h3>
   
   <div class="step">
-    <strong>[0] router</strong> (node, 0.01s)
+    <strong>[0] router</strong> (node, 0.00s)
     
     <div class="call">
       llm &middot; GenericFakeChatModel &middot; 0+0 tokens &middot; $0.0000
@@ -108,8 +171,12 @@
   
 </div>
 
-<div class="test passed">
+<div class="test passed" id="detail-1">
   <h2>test_refund_rejected_by_human &mdash; <span class="verdict pass">passed</span></h2>
+
+  
+  <p><em>A refund the human approver rejects is never issued.</em> <span class="category-badge">safety</span></p>
+  
 
   
 
@@ -118,7 +185,7 @@
   
   <p>
     cost: $0.0000
-    &middot; latency: 0.01s
+    &middot; latency: 0.00s
     &middot; tokens: 0
     
   </p>
@@ -166,8 +233,12 @@
   
 </div>
 
-<div class="test failed">
+<div class="test failed" id="detail-2">
   <h2>test_refund_budget_regression &mdash; <span class="verdict fail">failed</span></h2>
+
+  
+  <p><em>Deliberately wrong on purpose, to show what a real blocking failure looks like in this sample.</em> <span class="category-badge">safety</span></p>
+  
 
   
   <pre class="error">expected final_state[&#39;refunded&#39;] == False, got True</pre>
@@ -178,7 +249,7 @@
   
   <p>
     cost: $0.0000
-    &middot; latency: 0.01s
+    &middot; latency: 0.00s
     &middot; tokens: 0
     
   </p>
@@ -226,5 +297,6 @@
   
 </div>
 
+</details>
 </body>
 </html>

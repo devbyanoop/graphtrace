@@ -205,3 +205,68 @@ def test_without_gt_report_flag_no_report_file_is_written(pytester):
     ))
     pytester.runpytest()
     assert not (pytester.path / "report.html").exists()
+
+
+# -- Week 4+: @pytest.mark.graphtrace(...) executive-summary metadata ---------------------
+
+def test_gt_report_picks_up_graphtrace_marker_metadata(pytester):
+    pytester.makepyfile(_test_file(
+        """
+        import pytest
+
+        @pytest.mark.graphtrace(description="Customer should not be refunded without approval", severity="critical", category="safety")
+        def test_tagged_failure(run_graph):
+            run_graph(_build_graph(), {"x": 0}, mode="record")
+            assert False
+        """
+    ))
+    report_path = pytester.path / "report.html"
+    result = pytester.runpytest(f"--gt-report={report_path}")
+    result.assert_outcomes(failed=1)
+
+    results_json = (pytester.path / "report.json").read_text(encoding="utf-8")
+    assert "Customer should not be refunded without approval" in results_json
+    assert '"severity": "critical"' in results_json
+    assert '"category": "safety"' in results_json
+
+    html = report_path.read_text(encoding="utf-8")
+    assert "Customer should not be refunded without approval" in html
+    assert "NOT READY" in html
+
+
+def test_gt_report_marker_is_optional_and_defaults_cleanly(pytester):
+    """An untagged test must not raise or behave differently -- the marker's
+    whole point is that adopting it is optional, not required."""
+    pytester.makepyfile(_test_file(
+        """
+        def test_untagged(run_graph):
+            run_graph(_build_graph(), {"x": 0}, mode="record")
+        """
+    ))
+    report_path = pytester.path / "report.html"
+    result = pytester.runpytest(f"--gt-report={report_path}")
+    result.assert_outcomes(passed=1)
+    result.stdout.no_fnmatch_line("*Unknown marker*")
+    result.stdout.no_fnmatch_line("*PytestUnknownMarkWarning*")
+
+
+def test_gt_report_marker_applies_to_a_setup_error_too(pytester):
+    pytester.makepyfile(_test_file(
+        """
+        import pytest
+
+        @pytest.fixture
+        def broken():
+            raise RuntimeError("fixture setup exploded")
+
+        @pytest.mark.graphtrace(description="Should never reach a broken state", severity="high")
+        def test_with_broken_fixture(broken):
+            pass
+        """
+    ))
+    report_path = pytester.path / "report.html"
+    result = pytester.runpytest(f"--gt-report={report_path}")
+    result.assert_outcomes(errors=1)
+
+    html = report_path.read_text(encoding="utf-8")
+    assert "Should never reach a broken state" in html
