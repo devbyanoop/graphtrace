@@ -74,7 +74,7 @@ from langchain_core.tools import BaseTool  # noqa: E402
 from langgraph.checkpoint.memory import InMemorySaver  # noqa: E402
 from pydantic import Field  # noqa: E402
 
-from graphtrace import assert_tool_called  # noqa: E402
+from graphtrace import assert_budget, assert_tool_called  # noqa: E402
 from graphtrace import run_graph as _run_graph  # noqa: E402
 
 create_deep_agent = deepagents_graph.create_deep_agent
@@ -164,6 +164,97 @@ def test_deep_agent_subagent_delegation_via_graphtrace(run_graph):
     task_call = next(c for c in traj.tool_calls if c.name == "task")
     assert "object at 0x" not in str(task_call.args)
     assert task_call.args["runtime"]["_type"] == "ToolRuntime"
+
+
+@pytest.mark.graphtrace(
+    description="The deep agent delegates two independent calculations to two different sub-agents in parallel and synthesizes both results.",
+    category="parallel_execution",
+)
+def test_deep_agent_parallel_subagents_via_graphtrace(run_graph):
+    """The real parallel-delegation pattern from deepagents' own
+    tests/unit_tests/test_subagents.py::test_multiple_subagents_invoked_in_parallel
+    -- a single AIMessage with two `task` tool_calls, each routed to a
+    *different* specialized sub-agent, confirmed to complete independently
+    with their own distinct results, not conflated or dropped."""
+    parent_model = GenericFakeChatModel(messages=iter([
+        AIMessage(content="", tool_calls=[
+            {"name": "task", "args": {"description": "Calculate the sum of 5 and 7", "subagent_type": "math-adder"}, "id": "call_addition", "type": "tool_call"},
+            {"name": "task", "args": {"description": "Calculate the product of 4 and 6", "subagent_type": "math-multiplier"}, "id": "call_multiplication", "type": "tool_call"},
+        ]),
+        AIMessage(content="Both calculations completed successfully."),
+    ]))
+    addition_model = GenericFakeChatModel(messages=iter([AIMessage(content="The sum of 5 and 7 is 12.")]))
+    multiplication_model = GenericFakeChatModel(messages=iter([AIMessage(content="The product of 4 and 6 is 24.")]))
+    app = create_deep_agent(
+        model=parent_model,
+        checkpointer=InMemorySaver(),
+        subagents=[
+            CompiledSubAgent(name="math-adder", description="Specialized agent for addition.", runnable=create_agent(model=addition_model)),
+            CompiledSubAgent(name="math-multiplier", description="Specialized agent for multiplication.", runnable=create_agent(model=multiplication_model)),
+        ],
+    )
+
+    traj = run_graph(app, {"messages": [HumanMessage(content="What is 5+7 and what is 4*6?")]}, thread_id="parallel-thread")
+
+    assert_tool_called(traj, "task", args_match={"subagent_type": "math-adder"})
+    assert_tool_called(traj, "task", args_match={"subagent_type": "math-multiplier"})
+    results_by_subagent_type = {c.args["subagent_type"]: c.result.update["messages"][0].content for c in traj.tool_calls if c.name == "task"}
+    assert results_by_subagent_type == {
+        "math-adder": "The sum of 5 and 7 is 12.",
+        "math-multiplier": "The product of 4 and 6 is 24.",
+    }
+    assert traj.final_message == "Both calculations completed successfully."
+
+
+@pytest.mark.graphtrace(
+    description="Delegating to a sub-agent type that was never configured must fail gracefully -- the agent should be told, and the (nonexistent) work must never silently happen.",
+    severity="high",
+    category="safety",
+)
+def test_deep_agent_unknown_subagent_type_fails_gracefully_via_graphtrace(run_graph):
+    """A real safety property, not covered by the happy-path delegation test
+    above: a `task` call naming a `subagent_type` that was never registered
+    must come back as a normal tool result the parent can recover from (not
+    a crash, not a silent no-op), and the named sub-agent's own model must
+    never actually run -- confirmed directly against the fake model's own
+    call history, not inferred from the trajectory alone."""
+    parent_model = GenericFakeChatModel(messages=iter([
+        AIMessage(content="", tool_calls=[{"name": "task", "args": {"description": "do something", "subagent_type": "nonexistent-agent"}, "id": "call_1", "type": "tool_call"}]),
+        AIMessage(content="Sorry, that agent type does not exist."),
+    ]))
+    subagent_model = GenericFakeChatModel(messages=iter([AIMessage(content="should not run")]))
+    app = create_deep_agent(
+        model=parent_model,
+        checkpointer=InMemorySaver(),
+        subagents=[CompiledSubAgent(name="general-purpose", description="A general-purpose agent.", runnable=create_agent(model=subagent_model))],
+    )
+
+    traj = run_graph(app, {"messages": [HumanMessage(content="do something")]}, thread_id="unknown-agent-thread")
+
+    assert_tool_called(traj, "task", args_match={"subagent_type": "nonexistent-agent"})
+    assert traj.final_message == "Sorry, that agent type does not exist."
+    # The real correctness check: the fake subagent model's own call history
+    # must stay empty -- proof the deep agent recognized the invalid type and
+    # genuinely never dispatched to it, not just that the parent's final
+    # message happens to sound like it handled the error.
+    assert subagent_model.call_history == []
+    # No nested step under any namespace either -- nothing ran "inside" a
+    # sub-agent, because no sub-agent was ever actually invoked.
+    assert not any(s.namespace for s in traj.steps)
+
+
+@pytest.mark.graphtrace(
+    description="A single sub-agent delegation should complete well within a generous latency budget.",
+    category="performance",
+)
+def test_deep_agent_delegation_stays_within_latency_budget(run_graph):
+    """A real `assert_budget` check, not a toy -- fast, free, and local (a
+    `GenericFakeChatModel`, no real network at all) specifically so this
+    threshold is checking "did the real interception/recording machinery add
+    unreasonable overhead", not "is the network slow today"."""
+    app = _build_deep_agent_with_subagent()
+    traj = run_graph(app, {"messages": [HumanMessage(content="What is 2 + 3?")]}, thread_id="budget-thread")
+    assert_budget(traj, latency_s=5)
 
 
 def test_deep_agent_record_replay_round_trip_and_the_nested_visibility_limitation(tmp_path):

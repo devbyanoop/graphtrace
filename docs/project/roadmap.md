@@ -125,6 +125,18 @@ Kept as a permanent regression test, `tests/test_deepagents_compat.py` (gated wi
 
 **201 tests pass today.** A real HTML report covering both external apps was generated and shared directly.
 
+## Real-world test depth (2026-10-27, same day)
+
+Asked directly, looking at the shared report: can 3 thin, mostly happy-path tests actually justify a "READY" verdict? No — and that's exactly the overclaiming problem the executive summary work above exists to prevent, not produce. Three real additional scenarios added, using these libraries' own real test patterns again (not invented), so the coverage breakdown means something instead of showing one category once:
+
+- **Parallel sub-agent delegation** — the real pattern from deepagents' own `test_multiple_subagents_invoked_in_parallel`: two different sub-agents invoked concurrently from a single parent message, each completing independently with its own distinct result, confirmed not conflated or dropped.
+- **A real safety property**: delegating to a sub-agent type that was never registered. Confirmed the parent recovers gracefully (a normal tool result it can act on, not a crash) *and* that the named sub-agent's own model genuinely never ran — checked directly against the fake model's own call history, not inferred from the trajectory alone.
+- **A real `assert_budget` check** — fast and local (no real network at all) specifically so the threshold tests "did graphtrace's own interception add unreasonable overhead," not "was the network slow today."
+
+The two `langgraph-swarm-py` tests were also given real categories (`handoff`, `tool_use`) they'd been missing. The report's coverage breakdown across both real apps now reads `handoff`, `tool_use`, `delegation`, `parallel_execution`, `safety`, `performance` — six distinct real dimensions, not three thin ones labeled once.
+
+**204 tests pass today.**
+
 ## v0.2 — not started, not scheduled for v0.1
 
 Four pieces, all building on the already-shipped core rather than needing new infrastructure: the security test pack ([scope](../guide/security-test-pack.md)), observability export ([scope](../guide/observability-export.md)), [cut-point replay](../guide/cut-point-replay.md) (adopted from Chronicle, Microsoft, arXiv 2609.20625 — replay a recorded incident up to where it broke, then run the fix live from there), and statistical live-mode verification (adopted from AgentAssay, arXiv 2603.02601 — a Wilson-interval Pass/Fail/Inconclusive verdict across N real trials, so a single flaky nightly run stops being the whole story; see [Recording & replay](../guide/recording-and-replay.md#statistical-live-mode-verification-v02)).

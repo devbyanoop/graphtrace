@@ -33,7 +33,7 @@ Verify the install:
 pytest
 ```
 
-**201 tests should pass**, full regression, in well under a minute. Four of those (`tests/test_judge_live.py`) make a real call to a live Groq model and are skipped cleanly if `GROQ_API_KEY` isn't set (see `.env.example`) — everything else runs offline against fake chat models and hand-built fixtures.
+**204 tests should pass**, full regression, in well under a minute. Four of those (`tests/test_judge_live.py`) make a real call to a live Groq model and are skipped cleanly if `GROQ_API_KEY` isn't set (see `.env.example`) — everything else runs offline against fake chat models and hand-built fixtures.
 
 ```bash
 graphtrace --help

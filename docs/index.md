@@ -3,7 +3,7 @@
 **Regression testing for LangGraph agents, built as a pytest plugin.**
 
 !!! note "Status: v0.1 complete, heading toward release"
-    Everything described on this page is real and tested today — 201 tests pass, full regression. See [Roadmap & status](project/roadmap.md) for the exact build history, including every real bug found and fixed along the way.
+    Everything described on this page is real and tested today — 204 tests pass, full regression. See [Roadmap & status](project/roadmap.md) for the exact build history, including every real bug found and fixed along the way.
 
 ## The problem
 

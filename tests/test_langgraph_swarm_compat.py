@@ -91,6 +91,10 @@ def _build_swarm_app(model: FakeChatModel):
     return workflow.compile(checkpointer=MemorySaver())
 
 
+@pytest.mark.graphtrace(
+    description="Alice hands the conversation off to Bob when the user asks for him by name.",
+    category="handoff",
+)
 def test_swarm_handoff_to_bob_via_graphtrace(run_graph):
     """Turn 1 of the real test_swarm.py scenario: the user asks for Bob,
     Alice hands off via a real Command(graph=Command.PARENT, ...) tool call."""
@@ -118,6 +122,10 @@ def test_swarm_handoff_to_bob_via_graphtrace(run_graph):
     assert alice_enter.index < alice_exit.index
 
 
+@pytest.mark.graphtrace(
+    description="Bob hands the conversation back to Alice, who then calls the real add tool to answer a math question.",
+    category="tool_use",
+)
 def test_swarm_handoff_back_and_math_tool_call_via_graphtrace(run_graph):
     """Turn 2: Bob hands back to Alice, who then calls the real `add` tool --
     the same two-turn conversation test_swarm.py's own test checks, asserted

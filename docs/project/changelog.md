@@ -36,6 +36,18 @@ A different way of using a subgraph than `langgraph-swarm-py`'s: the sub-agent h
 
 201 tests pass, full regression.
 
+### Added (2026-10-27) -- real test depth, not just test count
+
+Asked directly whether 3 thin, mostly happy-path tests could justify the report's "READY" verdict. No -- added three more real scenarios, using these libraries' own real test patterns again:
+
+- `test_deep_agent_parallel_subagents_via_graphtrace` -- the real pattern from deepagents' own `test_multiple_subagents_invoked_in_parallel`: two different sub-agents invoked concurrently, each completing independently with a distinct result.
+- `test_deep_agent_unknown_subagent_type_fails_gracefully_via_graphtrace` -- a real safety property: delegating to an unregistered sub-agent type recovers gracefully, and the named sub-agent's own model genuinely never runs (checked against the fake model's own call history directly).
+- `test_deep_agent_delegation_stays_within_latency_budget` -- a real `assert_budget` check.
+
+Both `langgraph-swarm-py` tests also tagged with real categories (`handoff`, `tool_use`) they'd been missing. The report's coverage breakdown across both real apps now reads six distinct categories, not three thin ones labeled once.
+
+204 tests pass, full regression.
+
 ## [0.1.0] - 2026-10-26
 
 v0.1's full scope: the framework-agnostic `Trajectory` model and 12-function assertion API, the real LangGraph recording layer (including subgraphs), record/replay cassettes, a pinned-model judge contract with calibration, trace-to-test from a production export (Langfuse/OTel/LangSmith), a static HTML report, a real `graphtrace` CLI, and CI — 179 tests pass, full regression. Verified against real upstream sources throughout (a real live Groq model, the real `openinference-semantic-conventions` source, a real wheel build in a genuinely isolated clean venv), not just mocks and hand-built fixtures. Everything that follows, down to the next version header, was built and verified before this release.
