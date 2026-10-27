@@ -1,13 +1,22 @@
 # Installation
 
-!!! warning "Not yet on PyPI"
-    graphtrace hasn't published a release yet. Once it does, installation will be `pip install graphtrace`. This page will be updated the day that's true — until then, the section below is the real, verified way to run it today (including from a real built wheel, not just an editable install — see [Roadmap & status](../project/roadmap.md)'s packaging note).
-
-## Install from source (current, verified)
-
-This is what the project itself uses for development, and it works right now against the current state of the repository.
-
 **Requirements:** Python 3.10 or newer.
+
+```bash
+pip install graphtrace
+```
+
+That's it for normal use — `graphtrace` is on PyPI (v0.1.0, published 2026-10-27) with no extras required: `langgraph`, `langchain-core`, `ruamel.yaml`, `pydantic`, `litellm`, `scikit-learn`, `jinja2`, and `typer` all come along as core dependencies. This also registers graphtrace as a pytest plugin automatically (no `-p` flag needed) and installs a `graphtrace` console command — confirmed working this way from the real published wheel in a clean, isolated virtualenv, not just an editable dev install.
+
+```bash
+graphtrace --help
+```
+
+Should show three real commands: `from-trace`, `calibrate`, `report` — see the [CLI reference](../reference/cli.md).
+
+## Install from source (for contributing to graphtrace itself)
+
+This is what the project itself uses for development — needed if you're contributing to graphtrace, not just using it to test your own LangGraph agent.
 
 ```bash
 git clone https://github.com/devbyanoop/graphtrace.git
@@ -23,9 +32,7 @@ pip install -e ".[dev]"
 
 - `python -m venv .venv` creates an isolated Python environment just for this project.
 - `-e` installs in **editable** mode — changes under `src/graphtrace/` take effect immediately, without reinstalling.
-- `[dev]` pulls in `pytest` and `python-dotenv`. `pyproject.toml`'s own core `dependencies` (not an extra) bring in `langgraph`, `langchain-core`, `ruamel.yaml`, `pydantic`, `litellm`, `scikit-learn`, `jinja2`, and `typer` — everything the full feature set below needs, installed by default.
-
-This also installs a `graphtrace` console command and registers graphtrace as a pytest plugin automatically (no `-p` flag needed) — confirmed working the same way from a real built wheel in a clean, isolated virtualenv, not just this editable-install dev loop.
+- `[dev]` pulls in `pytest`, `python-dotenv`, and two real, pinned external apps (`langgraph-swarm`, `deepagents`) kept as permanent compatibility tests — not graphtrace's own dependency, gated with `pytest.importorskip` (see [Case study](../project/case-study.md)). `pyproject.toml`'s own core `dependencies` (not an extra) bring in `langgraph`, `langchain-core`, `ruamel.yaml`, `pydantic`, `litellm`, `scikit-learn`, `jinja2`, and `typer` — everything the full feature set below needs, installed by default.
 
 Verify the install:
 
@@ -35,18 +42,14 @@ pytest
 
 **222 tests should pass**, full regression, in well under a minute. Four of those (`tests/test_judge_live.py`) make a real call to a live Groq model and are skipped cleanly if `GROQ_API_KEY` isn't set (see `.env.example`) — everything else runs offline against fake chat models and hand-built fixtures.
 
-```bash
-graphtrace --help
-```
-
-Should show three real commands: `from-trace`, `calibrate`, `report` — see the [CLI reference](../reference/cli.md).
-
 ## Extras
 
 | Extra | Pulls in | Status |
 | --- | --- | --- |
-| `dev` | `pytest`, `python-dotenv` | ✅ Available |
+| `dev` | `pytest`, `python-dotenv`, `langgraph-swarm`, `deepagents` | ✅ Available |
 | `docs` | `mkdocs`, `mkdocs-material` | ✅ Available |
+
+`deepagents` itself requires Python ≥3.11 (graphtrace's own floor stays ≥3.10) — it's environment-marked in `pyproject.toml` so `pip install -e ".[dev]"` on Python 3.10 simply skips it, and the real compat tests that need it skip cleanly via `pytest.importorskip` rather than failing the install.
 
 Everything else (`langgraph`, `litellm`, `pydantic`, `ruamel.yaml`, `scikit-learn`, `jinja2`, `typer`) is a core dependency, installed by default — not behind an extra.
 

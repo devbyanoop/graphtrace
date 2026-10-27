@@ -52,7 +52,12 @@ dev = [
     # synthetic demo agent ever would have -- see
     # frameworks/langgraph/{interceptors,recorder}.py's own docstrings.
     "langgraph-swarm>=0.1,<1",
-    "deepagents>=0.7,<1",
+    # deepagents itself requires Python >=3.11 (confirmed against its real
+    # PyPI metadata) -- graphtrace's own floor stays >=3.10, so this is
+    # environment-marked rather than raising that floor project-wide. Under
+    # 3.10 it's simply not installed, and the real compat tests that need it
+    # (test_deepagents_*.py) already skip cleanly via pytest.importorskip.
+    "deepagents>=0.7,<1; python_version >= '3.11'",
 ]
 docs = [
     "mkdocs>=1.6",

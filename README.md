@@ -2,6 +2,7 @@
 
 **Regression testing for LangGraph agents — as a pytest plugin.**
 
+[![PyPI](https://img.shields.io/pypi/v/graphtrace.svg)](https://pypi.org/project/graphtrace/)
 [![CI](https://github.com/devbyanoop/graphtrace/actions/workflows/graphtrace.yml/badge.svg)](https://github.com/devbyanoop/graphtrace/actions/workflows/graphtrace.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/devbyanoop/graphtrace/blob/main/LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://github.com/devbyanoop/graphtrace/blob/main/pyproject.toml)
@@ -70,18 +71,11 @@ The recording layer is built behind a `FrameworkRunner` protocol specifically so
 
 ## Installation
 
-Not yet published to PyPI — install from source:
-
 ```bash
-git clone https://github.com/devbyanoop/graphtrace.git
-cd graphtrace
-python -m venv .venv
-source .venv/bin/activate   # Windows (Git Bash): source .venv/Scripts/activate
-
-pip install -e ".[dev]"
+pip install graphtrace
 ```
 
-See [Installation](https://github.com/devbyanoop/graphtrace/blob/main/docs/getting-started/installation.md) for the full breakdown, including the `docs` extra for building the documentation site locally.
+Requires Python 3.10+. No extras needed for normal use — `langgraph`, `litellm`, and everything else the feature set above needs comes along as a core dependency. See [Installation](https://github.com/devbyanoop/graphtrace/blob/main/docs/getting-started/installation.md) for the full breakdown, including installing from source if you're contributing to graphtrace itself.
 
 ## Quickstart
 
