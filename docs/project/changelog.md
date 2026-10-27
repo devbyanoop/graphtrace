@@ -48,6 +48,17 @@ Both `langgraph-swarm-py` tests also tagged with real categories (`handoff`, `to
 
 204 tests pass, full regression.
 
+### Added (2026-10-27, same day) -- real test depth, round two: 7 real-app tests to 25
+
+Asked again, more pointedly: "still only 7? can it be made of 30-50 cases?" Mined both libraries' own real test suites for scenarios not yet covered, rather than padding the existing two happy-path flows with reworded copies. Landed at 25 real-app tests, not 30-50 -- the honest ceiling of distinct, verified real material found, documented plainly rather than inflated to a round number.
+
+- `tests/test_deepagents_filesystem_compat.py` (new, 10 tests) -- deepagents' own built-in filesystem tools (`write_file`, `edit_file`, `grep`, `ls`, `delete`) through a full `create_deep_agent()` graph: write-then-edit (single and `replace_all`), graceful failure on a missing file/search string, `grep` across parallel-written files, `ls`-then-`delete`, and four real path-traversal/safety checks (`../`, a bare Windows absolute path, a `~`-prefixed path, each `severity="high"`).
+- `tests/test_deepagents_permissions_todo_compat.py` (new, 5 tests) -- `FilesystemPermission` write/delete enforcement and `TodoListMiddleware`, through a full agent conversation instead of deepagents' own unit-level internal-function tests. Includes the real all-or-nothing recursive-delete behavior from deepagents' own `TestRecursiveDeletePermissions`.
+- **A second real structural gap, distinct from the nested-subgraph one found testing `deepagents` the first time**: `TodoListMiddleware`'s rejection of two parallel `write_todos` calls in one AIMessage (the real scenario from deepagents' own `test_todo_middleware.py`) happens inside `wrap_tool_call`, before graphtrace's patched `BaseTool.invoke`/`ainvoke` ever fires -- `Trajectory.tool_calls` is empty for both rejected calls even though the real conversation carries both real error `ToolMessage`s. The agent's own behavior is unaffected; only the tool-call *list* undercounts in this one case. Documented with a real, verified assertion, not left as prose.
+- `tests/test_langgraph_swarm_compat.py` (3 new tests, 5 total) -- a three-agent handoff chain (Alice → Bob → Carol, confirming the subgraph index fix holds past two agents), a real tool exception (`ZeroDivisionError`) propagating through `run_graph()` with its exact type uncorrupted against a real external app's real tool for the first time, and state persisting across three conversation turns on the same checkpointer-backed thread.
+
+222 tests pass, full regression. The report's coverage breakdown now spans ten real categories across two real external apps.
+
 ## [0.1.0] - 2026-10-26
 
 v0.1's full scope: the framework-agnostic `Trajectory` model and 12-function assertion API, the real LangGraph recording layer (including subgraphs), record/replay cassettes, a pinned-model judge contract with calibration, trace-to-test from a production export (Langfuse/OTel/LangSmith), a static HTML report, a real `graphtrace` CLI, and CI — 179 tests pass, full regression. Verified against real upstream sources throughout (a real live Groq model, the real `openinference-semantic-conventions` source, a real wheel build in a genuinely isolated clean venv), not just mocks and hand-built fixtures. Everything that follows, down to the next version header, was built and verified before this release.

@@ -147,3 +147,93 @@ def test_swarm_handoff_back_and_math_tool_call_via_graphtrace(run_graph):
     # result, not just the node it happened in.
     transfer_call = next(c for c in traj.tool_calls if c.name == "transfer_to_alice")
     assert transfer_call.result.goto == "Alice"
+
+
+@pytest.mark.graphtrace(
+    description="A three-agent handoff chain: Alice hands off to Bob, who hands off to Carol, who gives the final answer.",
+    category="handoff",
+)
+def test_three_agent_handoff_chain_via_graphtrace(run_graph):
+    """A real extension of the swarm API to a longer chain than either of
+    this module's other tests uses -- the same create_swarm/
+    create_handoff_tool calls, just with a third real agent, confirming
+    graphtrace's subgraph handling holds across more than one hop."""
+    create_agent = langchain_agents.create_agent
+    create_handoff_tool = langgraph_swarm.create_handoff_tool
+    create_swarm = langgraph_swarm.create_swarm
+
+    model = FakeChatModel(responses=[
+        AIMessage(content="", name="Alice", tool_calls=[{"name": "transfer_to_bob", "args": {}, "id": "call_1"}]),
+        AIMessage(content="", name="Bob", tool_calls=[{"name": "transfer_to_carol", "args": {}, "id": "call_2"}]),
+        AIMessage(content="Carol here, the final answer is 42.", name="Carol"),
+    ])
+    alice = create_agent(model, tools=[create_handoff_tool(agent_name="Bob")], system_prompt="You are Alice.", name="Alice")
+    bob = create_agent(model, tools=[create_handoff_tool(agent_name="Carol")], system_prompt="You are Bob.", name="Bob")
+    carol = create_agent(model, tools=[], system_prompt="You are Carol.", name="Carol")
+    app = create_swarm([alice, bob, carol], default_active_agent="Alice").compile(checkpointer=MemorySaver())
+
+    traj = run_graph(app, {"messages": [{"role": "user", "content": "chain to carol"}]}, thread_id="chain-thread")
+
+    assert_tool_called(traj, "transfer_to_bob")
+    assert_tool_called(traj, "transfer_to_carol")
+    assert_state(traj, "active_agent", "Carol")
+    assert traj.final_message == "Carol here, the final answer is 42."
+
+
+@pytest.mark.graphtrace(
+    description="A real tool exception (division by zero) inside a swarm agent must propagate with its real exception type, never swallowed or disguised.",
+    severity="high",
+    category="error_handling",
+)
+def test_swarm_real_tool_exception_propagates_with_its_real_type(run_graph):
+    """Directly exercises graphtrace's own documented guarantee (replay/
+    engine.py: "a real exception from an actual call keeps its exact type via
+    a bare raise") against a real external app's real tool error for the
+    first time -- not graphtrace's own synthetic demo agent. Confirmed by
+    hand first: LangChain's own default tool-error handling re-raises the
+    real exception rather than wrapping it into an error ToolMessage, so
+    `run_graph` in live mode must let a real ZeroDivisionError through
+    completely unmodified, not a generic RuntimeError or something swallowed."""
+    create_agent = langchain_agents.create_agent
+    create_swarm = langgraph_swarm.create_swarm
+
+    def divide(a: int, b: int) -> float:
+        """Divide a by b."""
+        return a / b
+
+    model = FakeChatModel(responses=[
+        AIMessage(content="", name="Alice", tool_calls=[{"name": "divide", "args": {"a": 10, "b": 0}, "id": "call_1"}]),
+    ])
+    alice = create_agent(model, tools=[divide], system_prompt="You are Alice.", name="Alice")
+    app = create_swarm([alice], default_active_agent="Alice").compile(checkpointer=MemorySaver())
+
+    with pytest.raises(ZeroDivisionError):
+        run_graph(app, {"messages": [{"role": "user", "content": "divide 10 by 0"}]}, thread_id="div-error-thread")
+
+
+@pytest.mark.graphtrace(
+    description="The swarm remembers which agent is active across three separate conversation turns, not just two.",
+    category="state_persistence",
+)
+def test_swarm_state_persists_across_three_turns_via_graphtrace(run_graph):
+    """A real extension of this module's own two-turn test -- the same
+    checkpointer-backed persistence, carried one turn further, to confirm
+    `active_agent` genuinely survives more than a single handoff-and-back
+    round trip."""
+    model = FakeChatModel(responses=[
+        AIMessage(content="", name="Alice", tool_calls=[{"name": "transfer_to_bob", "args": {}, "id": "call_1"}]),
+        AIMessage(content="Ahoy! Bob here.", name="Bob"),
+        AIMessage(content="", name="Bob", tool_calls=[{"name": "transfer_to_alice", "args": {}, "id": "call_2"}]),
+        AIMessage(content="Sure, I'm back.", name="Alice"),
+        AIMessage(content="", name="Alice", tool_calls=[{"name": "add", "args": {"a": 1, "b": 1}, "id": "call_3"}]),
+        AIMessage(content="1 + 1 is 2.", name="Alice"),
+    ])
+    app = _build_swarm_app(model)
+
+    run_graph(app, {"messages": [{"role": "user", "content": "speak to Bob"}]}, thread_id="three-turn")
+    traj_turn_2 = run_graph(app, {"messages": [{"role": "user", "content": "back to Alice"}]}, thread_id="three-turn")
+    assert_state(traj_turn_2, "active_agent", "Alice")
+
+    traj_turn_3 = run_graph(app, {"messages": [{"role": "user", "content": "what's 1 + 1?"}]}, thread_id="three-turn")
+    assert_tool_called(traj_turn_3, "add", args_match={"a": 1, "b": 1})
+    assert traj_turn_3.final_message == "1 + 1 is 2."

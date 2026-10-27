@@ -137,6 +137,35 @@ The two `langgraph-swarm-py` tests were also given real categories (`handoff`, `
 
 **204 tests pass today.**
 
+## Real-world test depth, round two (2026-10-27, same day)
+
+Asked again, more pointedly: "still only 7? can it be made of 30-50 cases?" The honest answer wasn't to pad the existing happy-path flows with reworded copies — it was to go back to both libraries' own real test suites for scenarios this project hadn't touched yet, mining `deepagents`' own `test_file_system_tools.py`, `test_permissions.py`, and `test_todo_middleware.py`, plus a few new variations built directly against the public APIs already in use (a longer swarm handoff chain, a real tool exception, extended checkpointer persistence). The real count landed at **25** real-app scenarios, not 30-50 — documented here plainly rather than padded to hit a round number that wouldn't mean anything.
+
+**`tests/test_deepagents_filesystem_compat.py` (new, 10 tests)** — deepagents' own built-in filesystem tools (`write_file`, `edit_file`, `grep`, `ls`, `delete`), exercised through a full `create_deep_agent()` graph instead of calling backend internals directly:
+
+- `write_file` → `edit_file` (single replacement and `replace_all`), each on a real `StateBackend`-stored file.
+- `edit_file` failing gracefully on a missing file and on a missing search string — both real backend error strings, not exceptions escaping to the caller.
+- `grep` finding content written by two files created in parallel tool calls in a single AIMessage.
+- `ls` listing a freshly written file, then `delete` removing it — confirmed gone.
+- **Four real path-traversal/safety checks** (`severity="high"`): `edit_file`/`read_file`/`write_file`/`ls` all reject `../` traversal, a bare Windows absolute path, and a `~`-prefixed path, with the real backend error string, not a crash.
+
+One real test-authoring correction along the way, not a graphtrace bug: these tools run through LangGraph's real `ToolNode`, which wraps a tool's plain string return into a real `ToolMessage` — `ToolCall.result` is that `ToolMessage`, so assertions need `.content`, not a direct string comparison (already correctly handled on the serialization side; the new tests had just assumed the wrong shape at first).
+
+**`tests/test_deepagents_permissions_todo_compat.py` (new, 5 tests)** — two more of deepagents' own real middleware features, `FilesystemPermission` write/delete enforcement and `TodoListMiddleware`, both driven through a full agent conversation instead of deepagents' own unit-level internal-function tests:
+
+- A `write_file` call denied by a `FilesystemPermission(mode="deny")` rule, and the identical rule set having no effect on a write outside its path (`severity="high"` / contrast case).
+- The real all-or-nothing recursive-delete behavior from deepagents' own `TestRecursiveDeletePermissions`: deleting a directory is refused whenever *any* file beneath it is write-denied, even if most of the subtree is unrestricted (`severity="high"`).
+- `TodoListMiddleware` (not in `create_deep_agent`'s default stack — added via its own documented `middleware=[...]` merge point) tracking a single `write_todos` call in `final_state["todos"]`.
+- **A second real structural gap**, distinct from the nested-subgraph-visibility one found testing `deepagents` the first time: the real scenario copied from deepagents' own `test_todo_middleware.py` (two `write_todos` calls in the same AIMessage must both be rejected) revealed that `TodoListMiddleware`'s `wrap_tool_call` rejection happens *before* graphtrace's patched `BaseTool.invoke`/`ainvoke` ever fires — `traj.tool_calls` is empty for both rejected calls, even though the real conversation (`final_state["messages"]`) carries both real error `ToolMessage`s with the exact real error text, and `todos` correctly stays unset. The agent's own behavior is completely unaffected; only `Trajectory.tool_calls` undercounts in this one case. Documented with a real, verified assertion (`assert not any(c.name == "write_todos" for c in traj.tool_calls)`) rather than left as prose.
+
+**`tests/test_langgraph_swarm_compat.py` (3 new tests, 5 total)** — three more real scenarios built directly against `langgraph-swarm-py`'s own `create_swarm`/`create_handoff_tool`/`create_agent` API, verified by hand before being written:
+
+- A **three-agent handoff chain** (Alice → Bob → Carol), confirming the subgraph enter/exit fix from the first `langgraph-swarm-py` pass holds across more than one hop, not just the original two-agent case.
+- A **real tool exception** (`ZeroDivisionError` from a real `divide` tool) propagating through `run_graph()` with its exact real type uncorrupted — the first time this project's own documented "a live exception keeps its real type" guarantee was confirmed against a real external app's real tool error, not graphtrace's own synthetic demo agent.
+- **State persisting across three conversation turns**, not just two — `active_agent` surviving a second full handoff-and-back round trip on the same checkpointer-backed thread.
+
+**222 tests pass today.** The report's coverage breakdown now spans ten real categories across two real external apps: `handoff`, `tool_use`, `error_handling`, `state_persistence`, `delegation`, `parallel_execution`, `safety`, `performance`, `planning` — real distinct dimensions of real library behavior, not reworded restatements of the same two flows.
+
 ## v0.2 — not started, not scheduled for v0.1
 
 Four pieces, all building on the already-shipped core rather than needing new infrastructure: the security test pack ([scope](../guide/security-test-pack.md)), observability export ([scope](../guide/observability-export.md)), [cut-point replay](../guide/cut-point-replay.md) (adopted from Chronicle, Microsoft, arXiv 2609.20625 — replay a recorded incident up to where it broke, then run the fix live from there), and statistical live-mode verification (adopted from AgentAssay, arXiv 2603.02601 — a Wilson-interval Pass/Fail/Inconclusive verdict across N real trials, so a single flaky nightly run stops being the whole story; see [Recording & replay](../guide/recording-and-replay.md#statistical-live-mode-verification-v02)).
