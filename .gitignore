@@ -17,3 +17,6 @@ site/
 
 # Local secrets/config -- .env.example (names only, no values) is committed instead.
 .env
+
+# Client-facing case study PDF -- a sales asset, not part of the public repo.
+docs/graphtrace-case-study.pdf
