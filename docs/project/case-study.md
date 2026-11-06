@@ -88,11 +88,13 @@ path that produced it. Documented rather than hidden.
 
 ## If you're running an agent like this
 
-Every bug in the table above came from a system that already had passing tests — exactly the kind of
-gap that stays invisible until someone checks the actual path, not just the output. If you're running a
+Wrong node attribution, steps recorded out of order, a crash on a real handoff, a cache key that
+silently broke between runs — four real bugs, found in real, official open-source projects, and every
+one of them came from a system that already had passing tests. That's exactly the kind of gap that
+stays invisible until someone checks the actual path, not just the output. If you're running a
 LangGraph agent, or anything with the same branches/retries/tool-calls shape, in production or about to
-put one there, it's worth asking whether your current tests would have caught any of what's listed
-above. Most wouldn't — they're built to check the answer, not the route it took to get there.
+put one there, it's worth asking whether your current tests would catch any of that. Most wouldn't —
+they're built to check the answer, not the route it took to get there.
 
 graphtrace is open source and ready to point at your own graph, with no changes needed to the agent
 itself: [github.com/devbyanoop/graphtrace](https://github.com/devbyanoop/graphtrace).
