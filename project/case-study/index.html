@@ -1464,11 +1464,13 @@ path that produced it. Documented rather than hidden.</p>
 <li>CI runs the full suite and a strict documentation build on every push.</li>
 </ul>
 <h2 id="if-youre-running-an-agent-like-this">If you're running an agent like this<a class="headerlink" href="#if-youre-running-an-agent-like-this" title="Permanent link">&para;</a></h2>
-<p>Every bug in the table above came from a system that already had passing tests — exactly the kind of
-gap that stays invisible until someone checks the actual path, not just the output. If you're running a
+<p>Wrong node attribution, steps recorded out of order, a crash on a real handoff, a cache key that
+silently broke between runs — four real bugs, found in real, official open-source projects, and every
+one of them came from a system that already had passing tests. That's exactly the kind of gap that
+stays invisible until someone checks the actual path, not just the output. If you're running a
 LangGraph agent, or anything with the same branches/retries/tool-calls shape, in production or about to
-put one there, it's worth asking whether your current tests would have caught any of what's listed
-above. Most wouldn't — they're built to check the answer, not the route it took to get there.</p>
+put one there, it's worth asking whether your current tests would catch any of that. Most wouldn't —
+they're built to check the answer, not the route it took to get there.</p>
 <p>graphtrace is open source and ready to point at your own graph, with no changes needed to the agent
 itself: <a href="https://github.com/devbyanoop/graphtrace">github.com/devbyanoop/graphtrace</a>.</p>
 <p>I'm available for freelance work in test automation and AI-agent testing, from framework design to
